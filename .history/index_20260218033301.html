@@ -1592,7 +1592,7 @@
         specs: { Wingspan: '2.6m', Payload: '300g', Endurance: '90 min', Range: '8 km' },
         desc: 'Wahana glider beraspek rasio tinggi untuk misi endurance panjang dan penelitian aerodinamika.',
         img: 'assets/aircraft/ac04.png',
-        obj3d: 'assets/3d_pesawat/glider.obj',
+        obj3d: 'assets/3d_pesawat/ac04.obj',
         divColor: '#a78bfa',
         divColorRgb: '167,139,250',
       },
@@ -1607,7 +1607,7 @@
         rotX:0.15, rotY:0.4, autoRotate:true,
         zoom:3, pivot:null, wireframe:false,
       });
-      const [status, setStatus] = useState(null); // null | 'error' | 'unsupported'
+      const [status, setStatus] = useState(null); // null | 'error'
       const [loadProgress, setLoadProgress] = useState(0);
       const [wireframe, setWireframe] = useState(false);
       const [autoRotate, setAutoRotate] = useState(true);
@@ -1623,16 +1623,6 @@
 
       useEffect(() => {
         if (!mountRef.current) return;
-        
-        // Check WebGL support
-        const canvas = document.createElement('canvas');
-        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-        if (!gl) {
-          console.error('WebGL not supported');
-          setStatus('unsupported');
-          return;
-        }
-
         const el = mountRef.current;
         const s = stateRef.current;
         const W = el.clientWidth, H = el.clientHeight;
@@ -1913,27 +1903,6 @@
                 </div>
               )}
 
-              {/* WebGL Unsupported overlay */}
-              {status === 'unsupported' && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 pointer-events-none"
-                  style={{background:'rgba(4,8,16,0.9)'}}>
-                  <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke={`rgba(${plane.divColorRgb},0.4)`} strokeWidth="1.5">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                    <line x1="12" y1="9" x2="12" y2="13"/>
-                    <line x1="12" y1="17" x2="12.01" y2="17"/>
-                  </svg>
-                  <div style={{fontFamily:'Orbitron', fontSize:'0.85rem', fontWeight:700, color:`rgba(${plane.divColorRgb},0.6)`, letterSpacing:'0.1em', textAlign:'center'}}>
-                    WebGL UNSUPPORTED
-                  </div>
-                  <div style={{fontFamily:'Share Tech Mono', fontSize:'0.62rem', color:'rgba(200,216,232,0.35)', letterSpacing:'0.12em', textAlign:'center', maxWidth:'280px', lineHeight:1.6}}>
-                    Your device does not support WebGL or 3D graphics rendering. Please try on a different device.
-                  </div>
-                  <div style={{fontFamily:'Share Tech Mono', fontSize:'0.52rem', color:'rgba(200,216,232,0.2)', letterSpacing:'0.08em', marginTop:'8px'}}>
-                    DEVICE NOT COMPATIBLE
-                  </div>
-                </div>
-              )}
-
               {/* Top bar — ID + controls */}
               <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-3 md:px-4 py-2 md:py-3"
                 style={{background:'linear-gradient(to bottom, rgba(4,8,16,0.9), transparent)', zIndex:20}}>
@@ -2067,16 +2036,6 @@
 
       useEffect(() => {
         if (!mountRef.current) return;
-        
-        // Check WebGL support
-        const canvas = document.createElement('canvas');
-        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-        if (!gl) {
-          console.error('WebGL not supported');
-          setStatus('unsupported');
-          return;
-        }
-        
         const el = mountRef.current;
         const s = stateRef.current;
         const W = el.clientWidth, H = el.clientHeight;
@@ -2194,18 +2153,6 @@
                 <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
               </svg>
               <span style={{fontFamily:'Share Tech Mono', fontSize:'0.5rem', color:`rgba(${plane.divColorRgb},0.2)`, letterSpacing:'0.1em'}}>FILE NOT FOUND</span>
-            </div>
-          )}
-          {status === 'unsupported' && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none"
-              style={{background:'rgba(4,8,16,0.85)'}}>
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={`rgba(${plane.divColorRgb},0.3)`} strokeWidth="1.5">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                <line x1="12" y1="9" x2="12" y2="13"/>
-                <line x1="12" y1="17" x2="12.01" y2="17"/>
-              </svg>
-              <span style={{fontFamily:'Share Tech Mono', fontSize:'0.52rem', color:`rgba(${plane.divColorRgb},0.35)`, letterSpacing:'0.12em', textAlign:'center'}}>WebGL</span>
-              <span style={{fontFamily:'Share Tech Mono', fontSize:'0.48rem', color:`rgba(${plane.divColorRgb},0.25)`, letterSpacing:'0.1em', textAlign:'center'}}>UNSUPPORTED</span>
             </div>
           )}
           {status === 'ok' && (
