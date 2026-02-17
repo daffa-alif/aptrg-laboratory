@@ -429,7 +429,6 @@
         { href: '#home', label: 'HOME' },
         { href: '#about', label: 'ABOUT' },
         { href: '#divisions', label: 'DIVISI' },
-        { href: '#team', label: 'TIM' },
         { href: '#stats', label: 'STATS' },
         { href: '#contact', label: 'KONTAK' },
       ];
@@ -1062,207 +1061,6 @@
       );
     }
 
-    // ---- TEAM ----
-    const teamMembers = [
-      { name: 'Team Member', role: 'Ketua Laboratorium', division: 'Mechanic', divColor: '#00d4ff', img: 'assets/team/member1.png' },
-      { name: 'Team Member', role: 'Kepala Divisi GCS', division: 'GCS', divColor: '#ff6b00', img: 'assets/team/member2.png' },
-      { name: 'Team Member', role: 'Kepala Divisi Sistem', division: 'Sistem', divColor: '#00ff88', img: 'assets/team/member3.png' },
-      { name: 'Team Member', role: 'Kepala Divisi Umum', division: 'Umum', divColor: '#a78bfa', img: 'assets/team/member4.png' },
-      { name: 'Team Member', role: 'Anggota Mechanic', division: 'Mechanic', divColor: '#00d4ff', img: 'assets/team/member5.png' },
-      { name: 'Team Member', role: 'Anggota GCS', division: 'GCS', divColor: '#ff6b00', img: 'assets/team/member6.png' },
-      { name: 'Team Member', role: 'Anggota Sistem', division: 'Sistem', divColor: '#00ff88', img: 'assets/team/member7.png' },
-      { name: 'Team Member', role: 'Anggota Umum', division: 'Umum', divColor: '#a78bfa', img: 'assets/team/member8.png' },
-    ];
-
-    function TeamCard({ member, index }) {
-      const [imgError, setImgError] = useState(false);
-      const initials = member.name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
-
-      return (
-        <div className="div-card group fade-in"
-          style={{
-            border: `1px solid rgba(255,255,255,0.06)`,
-            background: 'rgba(8,15,26,0.7)',
-            animationDelay: `${index * 0.08}s`,
-            animationFillMode: 'both',
-          }}>
-
-          {/* Photo area */}
-          <div className="relative overflow-hidden" style={{aspectRatio:'1/1', background:'rgba(4,8,16,0.8)'}}>
-            {/* Top scan line sweep on hover */}
-            <div className="absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-              style={{background:'linear-gradient(180deg, transparent 0%, rgba(0,212,255,0.06) 50%, transparent 100%)'}}/>
-
-            {/* Corner HUD brackets */}
-            <div className="hud-corner hud-tl" style={{width:'14px',height:'14px',borderColor:member.divColor,zIndex:20}}/>
-            <div className="hud-corner hud-tr" style={{width:'14px',height:'14px',borderColor:member.divColor,zIndex:20}}/>
-            <div className="hud-corner hud-bl" style={{width:'14px',height:'14px',borderColor:member.divColor,zIndex:20}}/>
-            <div className="hud-corner hud-br" style={{width:'14px',height:'14px',borderColor:member.divColor,zIndex:20}}/>
-
-            {!imgError ? (
-              <img
-                src={member.img}
-                alt={member.name}
-                onError={() => setImgError(true)}
-                className="w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
-                style={{filter:'grayscale(20%) contrast(1.05)'}}
-              />
-            ) : (
-              /* Fallback avatar */
-              <div className="w-full h-full flex flex-col items-center justify-center gap-3"
-                style={{background:`radial-gradient(circle at center, rgba(${member.divColor === '#00d4ff' ? '0,212,255' : member.divColor === '#ff6b00' ? '255,107,0' : member.divColor === '#00ff88' ? '0,255,136' : '167,139,250'},0.08) 0%, transparent 70%)`}}>
-                <div className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold"
-                  style={{background:`rgba(255,255,255,0.04)`, border:`1px solid ${member.divColor}40`, color:member.divColor, fontFamily:'Orbitron'}}>
-                  {initials}
-                </div>
-                <div className="text-xs opacity-30" style={{fontFamily:'Share Tech Mono', letterSpacing:'0.1em'}}>NO PHOTO</div>
-              </div>
-            )}
-
-            {/* Division badge overlay */}
-            <div className="absolute top-3 right-3 z-20">
-              <span className="tag" style={{color:member.divColor, borderColor:`${member.divColor}50`, fontSize:'0.55rem', background:'rgba(4,8,16,0.85)', backdropFilter:'blur(4px)'}}>
-                {member.division.toUpperCase()}
-              </span>
-            </div>
-
-            {/* Bottom gradient overlay */}
-            <div className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
-              style={{background:'linear-gradient(to top, rgba(8,15,26,0.95), transparent)'}}/>
-          </div>
-
-          {/* Info */}
-          <div className="p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <h3 className="text-white font-bold text-base leading-tight mb-1 group-hover:text-primary transition-colors duration-300"
-                  style={{fontFamily:'Rajdhani', letterSpacing:'0.03em'}}>
-                  {member.name}
-                </h3>
-                <div className="text-xs opacity-60" style={{fontFamily:'Share Tech Mono', color:member.divColor}}>
-                  {member.role}
-                </div>
-              </div>
-              {/* Status dot */}
-              <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0 pulse-glow" style={{background:member.divColor, boxShadow:`0 0 8px ${member.divColor}`}}/>
-            </div>
-            {/* Bottom accent line */}
-            <div className="mt-4 h-px" style={{background:`linear-gradient(90deg, ${member.divColor}60, transparent)`}}/>
-          </div>
-        </div>
-      );
-    }
-
-    function Team() {
-      const [filter, setFilter] = useState('ALL');
-      const filters = ['ALL', 'Mechanic', 'GCS', 'Sistem', 'Umum'];
-      const divColors = { Mechanic:'#00d4ff', GCS:'#ff6b00', Sistem:'#00ff88', Umum:'#a78bfa' };
-
-      const filtered = filter === 'ALL' ? teamMembers : teamMembers.filter(m => m.division === filter);
-
-      return (
-        <section id="team" className="py-28 relative" style={{background:'var(--darker)'}}>
-          <div className="absolute inset-0 grid-bg opacity-20"/>
-
-          {/* Decorative vertical lines */}
-          <div className="absolute top-0 left-1/4 w-px h-full opacity-5" style={{background:'linear-gradient(to bottom, transparent, var(--primary), transparent)'}}/>
-          <div className="absolute top-0 right-1/4 w-px h-full opacity-5" style={{background:'linear-gradient(to bottom, transparent, var(--accent), transparent)'}}/>
-
-          <div className="relative max-w-7xl mx-auto px-6">
-            {/* Header */}
-            <div className="text-center mb-14">
-              <div className="flex items-center justify-center gap-3 mb-4">
-                <div className="h-px w-12 bg-primary opacity-40"/>
-                <span className="tag text-primary" style={{borderColor:'rgba(0,212,255,0.3)'}}>SDM LABORATORIUM</span>
-                <div className="h-px w-12 bg-primary opacity-40"/>
-              </div>
-              <h2 className="text-white mb-4" style={{fontFamily:'Orbitron', fontSize:'clamp(1.8rem, 4vw, 3rem)', fontWeight:700}}>
-                TIM <span style={{color:'var(--primary)'}}>APTRG</span>
-              </h2>
-              <p className="text-gray-500 max-w-lg mx-auto text-sm leading-relaxed">
-                Para peneliti dan anggota aktif yang mendorong inovasi UAV
-                dan teknologi telemetri di laboratorium APTRG.
-              </p>
-            </div>
-
-            {/* Filter tabs */}
-            <div className="flex flex-wrap items-center justify-center gap-2 mb-12">
-              {filters.map(f => (
-                <button key={f} onClick={() => setFilter(f)}
-                  className="tag transition-all duration-200 cursor-pointer"
-                  style={{
-                    color: filter === f ? (f === 'ALL' ? 'var(--dark)' : divColors[f] || 'var(--dark)') : 'rgba(200,216,232,0.4)',
-                    borderColor: filter === f ? (f === 'ALL' ? 'var(--primary)' : divColors[f] || 'var(--primary)') : 'rgba(255,255,255,0.08)',
-                    background: filter === f ? (f === 'ALL' ? 'var(--primary)' : divColors[f] || 'var(--primary)') : 'transparent',
-                    fontSize: '0.68rem',
-                    padding: '5px 16px',
-                    fontFamily: 'Share Tech Mono',
-                    letterSpacing: '0.12em',
-                  }}>
-                  {f}
-                </button>
-              ))}
-            </div>
-
-            {/* Team photo banner — full width group photo */}
-            <div className="relative mb-12 overflow-hidden" style={{border:'1px solid rgba(0,212,255,0.1)'}}>
-              <div className="hud-corner hud-tl" style={{width:'20px',height:'20px'}}/>
-              <div className="hud-corner hud-tr" style={{width:'20px',height:'20px'}}/>
-              <div className="hud-corner hud-bl" style={{width:'20px',height:'20px'}}/>
-              <div className="hud-corner hud-br" style={{width:'20px',height:'20px'}}/>
-
-              {/* Group photo */}
-              <div className="relative" style={{aspectRatio:'21/8', minHeight:'180px', background:'rgba(4,8,16,0.9)'}}>
-                <img src="assets/team/group.png" alt="APTRG Team Photo"
-                  className="w-full h-full object-cover"
-                  style={{filter:'grayscale(15%) contrast(1.05)'}}
-                  onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}/>
-                {/* Fallback */}
-                <div className="absolute inset-0 hidden items-center justify-center flex-col gap-3" style={{background:'radial-gradient(ellipse at center, rgba(0,212,255,0.05) 0%, transparent 70%)'}}>
-                  <div style={{color:'rgba(0,212,255,0.2)', fontFamily:'Orbitron', fontSize:'clamp(1rem,3vw,2rem)', fontWeight:700, letterSpacing:'0.2em'}}>
-                    APTRG TEAM
-                  </div>
-                  <div style={{color:'rgba(0,212,255,0.15)', fontFamily:'Share Tech Mono', fontSize:'0.7rem', letterSpacing:'0.2em'}}>
-                    FOTO TIM — assets/team/group.png
-                  </div>
-                </div>
-
-                {/* Overlay gradient */}
-                <div className="absolute inset-0 pointer-events-none"
-                  style={{background:'linear-gradient(to right, rgba(2,5,8,0.5) 0%, transparent 20%, transparent 80%, rgba(2,5,8,0.5) 100%)'}}/>
-                <div className="absolute bottom-0 left-0 right-0 h-24 pointer-events-none"
-                  style={{background:'linear-gradient(to top, rgba(2,5,8,0.8), transparent)'}}/>
-
-                {/* Label */}
-                <div className="absolute bottom-4 left-6 flex items-center gap-3">
-                  <img src="assets/aptrg.png" alt="APTRG" style={{width:'28px',height:'28px',objectFit:'contain',filter:'drop-shadow(0 0 6px rgba(0,212,255,0.6))'}}
-                    onError={e => e.target.style.display='none'}/>
-                  <div>
-                    <div style={{fontFamily:'Orbitron', fontSize:'0.75rem', color:'var(--primary)', letterSpacing:'0.15em', fontWeight:700}}>APTRG TEAM</div>
-                    <div style={{fontFamily:'Share Tech Mono', fontSize:'0.6rem', color:'rgba(200,216,232,0.4)', letterSpacing:'0.1em'}}>FOTO BERSAMA</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Members grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {filtered.map((member, i) => (
-                <TeamCard key={i} member={member} index={i}/>
-              ))}
-            </div>
-
-            {/* Bottom note */}
-            <div className="text-center mt-10">
-              <p className="text-xs opacity-30" style={{fontFamily:'Share Tech Mono', letterSpacing:'0.15em'}}>
-                GANTI FOTO — assets/team/member1.png s/d member8.png · group.png
-              </p>
-            </div>
-          </div>
-        </section>
-      );
-    }
-
     // ---- APP ROOT ----
     function App() {
       const [activeSection, setActiveSection] = useState('home');
@@ -1273,7 +1071,7 @@
           const total = document.documentElement.scrollHeight - window.innerHeight;
           setScrollProgress((window.scrollY / total) * 100);
 
-          const sections = ['home','about','divisions','team','stats','contact'];
+          const sections = ['home','about','divisions','stats','contact'];
           for (const s of sections.reverse()) {
             const el = document.getElementById(s);
             if (el && window.scrollY >= el.offsetTop - 200) {
@@ -1294,7 +1092,6 @@
           <Hero/>
           <About/>
           <Divisions/>
-          <Team/>
           <Stats/>
           <Ecosystem/>
           <Contact/>
