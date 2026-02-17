@@ -1,0 +1,2037 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>APTRG — Aeromodelling Payload & Telemetry Research Group</title>
+  <link rel="icon" type="image/png" href="assets/aptrg.png"/>
+  <link rel="shortcut icon" type="image/png" href="assets/aptrg.png"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // OBJLoader r128 — inline minimal implementation
+    (function(){
+      class OBJLoader {
+        constructor(manager){ this.manager = manager || THREE.DefaultLoadingManager; }
+        load(url, onLoad, onProgress, onError){
+          const loader = new THREE.FileLoader(this.manager);
+          loader.setPath(this.path||'');
+          loader.load(url, text => { try{ onLoad(this.parse(text)); }catch(e){ if(onError)onError(e); } }, onProgress, onError);
+        }
+        setPath(p){ this.path=p; return this; }
+        parse(text){
+          const obj = new THREE.Group();
+          const vertices=[], normals=[], uvs=[];
+          const geomData={ v:[], vn:[], vt:[], indices:[] };
+          const lines = text.split('\n');
+          let currentGeo = null, currentMesh = null;
+          const startNewMesh = (name) => {
+            currentGeo = new THREE.BufferGeometry();
+            const mat = new THREE.MeshPhongMaterial({color:0x8899aa, shininess:60, specular:0x223344});
+            currentMesh = new THREE.Mesh(currentGeo, mat);
+            currentMesh.name = name||'mesh';
+            obj.add(currentMesh);
+          };
+          startNewMesh('default');
+          const posArr=[], normArr=[], uvArr=[];
+          for(const raw of lines){
+            const line = raw.trim();
+            if(!line || line[0]==='#') continue;
+            const parts = line.split(/\s+/);
+            if(parts[0]==='v'){ vertices.push(parseFloat(parts[1]),parseFloat(parts[2]),parseFloat(parts[3])); }
+            else if(parts[0]==='vn'){ normals.push(parseFloat(parts[1]),parseFloat(parts[2]),parseFloat(parts[3])); }
+            else if(parts[0]==='vt'){ uvs.push(parseFloat(parts[1]),parseFloat(parts[2])); }
+            else if(parts[0]==='o'||parts[0]==='g'){
+              if(posArr.length>0){
+                currentGeo.setAttribute('position',new THREE.Float32BufferAttribute([...posArr],3));
+                if(normArr.length) currentGeo.setAttribute('normal',new THREE.Float32BufferAttribute([...normArr],3));
+                else currentGeo.computeVertexNormals();
+                posArr.length=0; normArr.length=0; uvArr.length=0;
+              }
+              startNewMesh(parts.slice(1).join(' '));
+            }
+            else if(parts[0]==='f'){
+              const faceVerts = parts.slice(1).map(p=>{
+                const s=p.split('/');
+                return { vi:(parseInt(s[0])||1)-1, vti:s[1]?(parseInt(s[1])||1)-1:-1, vni:s[2]?(parseInt(s[2])||1)-1:-1 };
+              });
+              for(let i=1;i<faceVerts.length-1;i++){
+                [faceVerts[0],faceVerts[i],faceVerts[i+1]].forEach(fv=>{
+                  const bi=fv.vi*3;
+                  posArr.push(vertices[bi],vertices[bi+1],vertices[bi+2]);
+                  if(fv.vni>=0){const ni=fv.vni*3; normArr.push(normals[ni],normals[ni+1],normals[ni+2]);}
+                });
+              }
+            }
+          }
+          if(posArr.length>0){
+            currentGeo.setAttribute('position',new THREE.Float32BufferAttribute([...posArr],3));
+            if(normArr.length) currentGeo.setAttribute('normal',new THREE.Float32BufferAttribute([...normArr],3));
+            else currentGeo.computeVertexNormals();
+          }
+          // Remove empty meshes
+          obj.children.filter(c=>!c.geometry||!c.geometry.attributes.position).forEach(c=>obj.remove(c));
+          return obj;
+        }
+      }
+      window.OBJLoader = OBJLoader;
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --primary: #00d4ff;
+      --accent: #ff6b00;
+      --success: #00ff88;
+      --dark: #040810;
+      --darker: #020508;
+      --surface: #080f1a;
+      --surface2: #0d1929;
+      --border: rgba(0, 212, 255, 0.15);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background-color: var(--dark);
+      color: #c8d8e8;
+      font-family: 'Rajdhani', sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: var(--darker); }
+    ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 2px; }
+
+    /* GRID BACKGROUND */
+    .grid-bg {
+      background-image:
+        linear-gradient(rgba(0,212,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.04) 1px, transparent 1px);
+      background-size: 50px 50px;
+    }
+
+    /* HUD Frame corners */
+    .hud-corner {
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-color: var(--primary);
+      border-style: solid;
+      opacity: 0.7;
+    }
+    .hud-tl { top: 0; left: 0; border-width: 2px 0 0 2px; }
+    .hud-tr { top: 0; right: 0; border-width: 2px 2px 0 0; }
+    .hud-bl { bottom: 0; left: 0; border-width: 0 0 2px 2px; }
+    .hud-br { bottom: 0; right: 0; border-width: 0 2px 2px 0; }
+
+    /* Scan line effect */
+    .scanline {
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.08) 2px,
+        rgba(0,0,0,0.08) 4px
+      );
+      pointer-events: none;
+    }
+
+    /* Glow effects */
+    .glow-cyan { text-shadow: 0 0 20px rgba(0,212,255,0.8), 0 0 40px rgba(0,212,255,0.4); }
+    .glow-orange { text-shadow: 0 0 20px rgba(255,107,0,0.8), 0 0 40px rgba(255,107,0,0.4); }
+    .glow-green { text-shadow: 0 0 20px rgba(0,255,136,0.8); }
+
+    .box-glow { box-shadow: 0 0 30px rgba(0,212,255,0.1), inset 0 0 20px rgba(0,212,255,0.03); }
+    .box-glow-hover:hover { box-shadow: 0 0 50px rgba(0,212,255,0.25), inset 0 0 30px rgba(0,212,255,0.05); }
+
+    /* HERO */
+    .hero-title {
+      font-family: 'Orbitron', monospace;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      line-height: 1;
+    }
+
+    .hero-subtitle {
+      font-family: 'Share Tech Mono', monospace;
+      letter-spacing: 0.15em;
+    }
+
+    /* Animated drone radar ring */
+    @keyframes radarSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @keyframes ping2 {
+      0%, 100% { opacity: 0; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-12px); }
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes countUp { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes blinkCursor {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    @keyframes glitch1 {
+      0%, 90%, 100% { clip-path: none; transform: none; }
+      91% { clip-path: polygon(0 0, 100% 0, 100% 30%, 0 30%); transform: translateX(-3px); }
+      93% { clip-path: polygon(0 60%, 100% 60%, 100% 80%, 0 80%); transform: translateX(3px); }
+      95% { clip-path: none; transform: none; }
+    }
+    @keyframes borderGlow {
+      0%, 100% { border-color: rgba(0,212,255,0.3); }
+      50% { border-color: rgba(0,212,255,0.8); }
+    }
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.4; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.05); }
+    }
+
+    .radar-spin { animation: radarSpin 4s linear infinite; }
+    .float-anim { animation: float 4s ease-in-out infinite; }
+    .slide-in { animation: slideIn 0.8s ease forwards; }
+    .fade-in { animation: fadeIn 0.6s ease forwards; }
+    .blink-cursor { animation: blinkCursor 1s infinite; }
+    .pulse-glow { animation: pulseGlow 2s ease-in-out infinite; }
+
+    .div-card {
+      transition: all 0.35s cubic-bezier(0.23, 1, 0.32, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .div-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%;
+      width: 100%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(0,212,255,0.06), transparent);
+      transition: left 0.6s;
+    }
+    .div-card:hover::before { left: 100%; }
+    .div-card:hover {
+      transform: translateY(-6px);
+      border-color: rgba(0,212,255,0.5) !important;
+    }
+
+    /* NAV */
+    .nav-link {
+      font-family: 'Share Tech Mono', monospace;
+      letter-spacing: 0.1em;
+      font-size: 0.78rem;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .nav-link::after {
+      content: '';
+      position: absolute;
+      bottom: -4px; left: 0;
+      width: 0; height: 1px;
+      background: var(--primary);
+      transition: width 0.3s;
+    }
+    .nav-link:hover { color: var(--primary); }
+    .nav-link:hover::after { width: 100%; }
+
+    /* BUTTON */
+    .btn-primary {
+      font-family: 'Share Tech Mono', monospace;
+      letter-spacing: 0.12em;
+      font-size: 0.78rem;
+      background: transparent;
+      border: 1px solid var(--primary);
+      color: var(--primary);
+      padding: 10px 28px;
+      transition: all 0.25s;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .btn-primary::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--primary);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.25s;
+    }
+    .btn-primary:hover::before { transform: scaleX(1); }
+    .btn-primary:hover { color: var(--dark); }
+    .btn-primary span { position: relative; z-index: 1; }
+
+    .btn-accent {
+      font-family: 'Share Tech Mono', monospace;
+      letter-spacing: 0.12em;
+      font-size: 0.78rem;
+      background: var(--accent);
+      border: 1px solid var(--accent);
+      color: #fff;
+      padding: 10px 28px;
+      transition: all 0.25s;
+      cursor: pointer;
+    }
+    .btn-accent:hover { background: transparent; color: var(--accent); }
+
+    /* STATS counter */
+    .stat-num {
+      font-family: 'Orbitron', monospace;
+      font-weight: 700;
+    }
+
+    /* Timeline */
+    .timeline-line {
+      background: linear-gradient(to bottom, var(--primary), transparent);
+    }
+
+    /* Division icon */
+    .div-icon {
+      font-size: 2rem;
+      filter: drop-shadow(0 0 10px currentColor);
+    }
+
+    /* Noise overlay */
+    .noise {
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    }
+
+    /* Horizontal scroll indicator */
+    .progress-bar {
+      background: linear-gradient(90deg, var(--primary), var(--accent));
+      height: 2px;
+      transition: width 0.1s;
+    }
+
+    /* MOBILE */
+    @media (max-width: 768px) {
+      .hero-title { font-size: clamp(2rem, 8vw, 4rem); }
+    }
+
+    .tag {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      border: 1px solid;
+      padding: 2px 10px;
+    }
+
+    /* Diagonal separator */
+    /* 3D VIEWER */
+    .viewer-3d canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      touch-action: none;
+    }
+    @keyframes spin3d {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .spin-3d { animation: spin3d 1.2s linear infinite; }
+
+    .diagonal-sep {
+      clip-path: polygon(0 0, 100% 0, 100% 85%, 0 100%);
+    }
+    .diagonal-sep-rev {
+      clip-path: polygon(0 0, 100% 15%, 100% 100%, 0 100%);
+    }
+
+    /* LOGO image */
+    .logo-img {
+      object-fit: contain;
+      filter: drop-shadow(0 0 8px rgba(0,212,255,0.5));
+      transition: filter 0.3s;
+    }
+    .logo-img:hover {
+      filter: drop-shadow(0 0 16px rgba(0,212,255,0.9));
+    }
+    .logo-img-white {
+      filter: brightness(0) invert(1) drop-shadow(0 0 6px rgba(0,212,255,0.4));
+    }
+
+    /* LOADING SCREEN */
+    @keyframes loadBar {
+      from { width: 0%; }
+      to { width: 100%; }
+    }
+    @keyframes loadFadeOut {
+      0% { opacity: 1; visibility: visible; }
+      100% { opacity: 0; visibility: hidden; }
+    }
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: var(--darker);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      animation: loadFadeOut 0.6s ease 2.4s forwards;
+    }
+    #loading-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--accent));
+      box-shadow: 0 0 12px var(--primary);
+      animation: loadBar 2s cubic-bezier(0.4,0,0.2,1) forwards;
+    }
+  </style>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#00d4ff',
+            accent: '#ff6b00',
+            success: '#00ff88',
+            dark: '#040810',
+            darker: '#020508',
+            surface: '#080f1a',
+            surface2: '#0d1929',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- LOADING SCREEN -->
+  <div id="loading-screen">
+    <div style="position:relative; width:110px; height:110px; display:flex; align-items:center; justify-content:center;">
+      <!-- rotating ring -->
+      <div style="position:absolute;inset:0;border-radius:50%;border:1px solid rgba(0,212,255,0.15);animation:radarSpin 3s linear infinite;background:conic-gradient(from 0deg,rgba(0,212,255,0.0) 0deg,rgba(0,212,255,0.25) 60deg,rgba(0,212,255,0.0) 120deg);"></div>
+      <div style="position:absolute;inset:8px;border-radius:50%;border:1px solid rgba(0,212,255,0.08);"></div>
+      <img src="assets/aptrg.png" alt="APTRG" style="width:64px;height:64px;object-fit:contain;filter:drop-shadow(0 0 12px rgba(0,212,255,0.7));" onerror="this.style.display='none';document.getElementById('loading-fallback').style.display='flex'"/>
+      <div id="loading-fallback" style="display:none;font-family:Orbitron,monospace;font-weight:900;font-size:1rem;color:var(--primary);letter-spacing:0.1em;text-shadow:0 0 20px rgba(0,212,255,0.8);">APTRG</div>
+    </div>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:0.7rem;letter-spacing:0.25em;color:rgba(0,212,255,0.5);">INITIALIZING SYSTEM...</div>
+    <div style="width:200px;height:2px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
+      <div id="loading-bar-fill"></div>
+    </div>
+  </div>
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // ---- Icons (SVG) ----
+    const icons = {
+      mechanic: (
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/>
+          <path d="M19.622 10.395l-1.097-2.65L20 6l-2-2-1.735 1.483-2.707-1.113L12.935 2h-1.954l-.632 2.401-2.645 1.115L6 4 4 6l1.453 1.789-1.08 2.657L2 11v2l2.373.554 1.098 2.713L4 18l2 2 1.784-1.488 2.645 1.115.593 2.373h1.954l.555-2.371 2.707-1.112L17.97 20l2-2-1.456-1.778 1.098-2.637.388-.085V11l-2.378-.605z"/>
+        </svg>
+      ),
+      gcs: (
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <path d="M8 21h8M12 17v4"/>
+          <circle cx="12" cy="10" r="3"/>
+          <path d="M16.24 7.76a6 6 0 010 8.49M7.76 7.76a6 6 0 000 8.49"/>
+        </svg>
+      ),
+      sistem: (
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+      ),
+      umum: (
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+        </svg>
+      ),
+      drone: (
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <circle cx="12" cy="12" r="2"/>
+          <path d="M5 5l3 3M19 5l-3 3M5 19l3-3M19 19l-3-3"/>
+          <circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/>
+          <circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
+          <path d="M12 10V8M12 16v-2M10 12H8M16 12h-2"/>
+        </svg>
+      ),
+      menu: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      ),
+      close: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      ),
+      arrow: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+      ),
+      signal: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/>
+          <circle cx="12" cy="20" r="1" fill="currentColor"/>
+        </svg>
+      ),
+    };
+
+    // ---- NAVBAR ----
+    function Navbar({ activeSection }) {
+      const [menuOpen, setMenuOpen] = useState(false);
+      const [scrolled, setScrolled] = useState(false);
+
+      useEffect(() => {
+        const onScroll = () => setScrolled(window.scrollY > 50);
+        window.addEventListener('scroll', onScroll);
+        return () => window.removeEventListener('scroll', onScroll);
+      }, []);
+
+      const links = [
+        { href: '#home', label: 'HOME' },
+        { href: '#about', label: 'ABOUT' },
+        { href: '#divisions', label: 'DIVISI' },
+        { href: '#team', label: 'TIM' },
+        { href: '#highlight', label: 'VIDEO' },
+        { href: '#aircraft', label: 'PESAWAT' },
+        { href: '#contact', label: 'KONTAK' },
+      ];
+
+      return (
+        <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'backdrop-blur-md' : ''}`}
+          style={{ background: scrolled ? 'rgba(4,8,16,0.92)' : 'transparent', borderBottom: scrolled ? '1px solid rgba(0,212,255,0.1)' : 'none' }}>
+          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            {/* Logo */}
+            <a href="#home" className="flex items-center gap-3 group">
+              <div className="relative flex items-center justify-center" style={{width:'40px', height:'40px'}}>
+                <img src="assets/aptrg.png" alt="APTRG Logo" className="logo-img" style={{width:'38px',height:'38px'}}
+                  onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}/>
+                <div className="absolute inset-0 hidden items-center justify-center" style={{border:'1px solid rgba(0,212,255,0.4)'}}>
+                  <div className="hud-corner hud-tl" style={{width:'8px',height:'8px'}}/>
+                  <div className="hud-corner hud-tr" style={{width:'8px',height:'8px'}}/>
+                  <div className="hud-corner hud-bl" style={{width:'8px',height:'8px'}}/>
+                  <div className="hud-corner hud-br" style={{width:'8px',height:'8px'}}/>
+                  <span className="text-primary font-bold" style={{fontFamily:'Orbitron',fontSize:'0.7rem'}}>AP</span>
+                </div>
+              </div>
+              <div>
+                <div className="text-primary font-bold tracking-widest" style={{fontFamily:'Orbitron',fontSize:'0.8rem'}}>APTRG</div>
+                <div className="text-xs tracking-widest opacity-50" style={{fontFamily:'Share Tech Mono',fontSize:'0.55rem'}}>LAB RESEARCH</div>
+              </div>
+            </a>
+
+            {/* Desktop Links */}
+            <div className="hidden md:flex items-center gap-8">
+              {links.map(l => (
+                <a key={l.href} href={l.href} className="nav-link opacity-70 hover:opacity-100"
+                  style={{color: activeSection === l.href.slice(1) ? 'var(--primary)' : '#c8d8e8'}}>
+                  {l.label}
+                </a>
+              ))}
+            </div>
+
+            {/* CTA */}
+            <div className="hidden md:block">
+              <button className="btn-primary"><span>JOIN US</span></button>
+            </div>
+
+            {/* Mobile */}
+            <button className="md:hidden text-primary" onClick={() => setMenuOpen(!menuOpen)}>
+              {menuOpen ? icons.close : icons.menu}
+            </button>
+          </div>
+
+          {/* Mobile menu */}
+          {menuOpen && (
+            <div className="md:hidden" style={{background:'rgba(4,8,16,0.97)', borderBottom:'1px solid rgba(0,212,255,0.1)'}}>
+              {links.map(l => (
+                <a key={l.href} href={l.href}
+                  className="block px-6 py-4 nav-link text-sm opacity-70 hover:opacity-100"
+                  style={{borderBottom:'1px solid rgba(0,212,255,0.06)'}}
+                  onClick={() => setMenuOpen(false)}>
+                  {l.label}
+                </a>
+              ))}
+              <div className="px-6 py-4">
+                <button className="btn-primary w-full"><span>JOIN US</span></button>
+              </div>
+            </div>
+          )}
+        </nav>
+      );
+    }
+
+    // ---- HERO ----
+    function Hero() {
+      const [typed, setTyped] = useState('');
+      const fullText = 'Aeromodelling Payload & Telemetry Research Group';
+
+      useEffect(() => {
+        let i = 0;
+        const t = setInterval(() => {
+          if (i <= fullText.length) {
+            setTyped(fullText.slice(0, i));
+            i++;
+          } else clearInterval(t);
+        }, 35);
+        return () => clearInterval(t);
+      }, []);
+
+      return (
+        <section id="home" className="relative min-h-screen flex items-center overflow-hidden grid-bg"
+          style={{ background: 'linear-gradient(135deg, #020508 0%, #040810 50%, #060d18 100%)' }}>
+
+          {/* Animated radar rings */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            {[220, 380, 540, 700].map((size, i) => (
+              <div key={i} className="absolute rounded-full"
+                style={{
+                  width: size, height: size,
+                  border: '1px solid rgba(0,212,255,0.08)',
+                  animation: `pulseGlow ${2.5 + i * 0.5}s ease-in-out infinite`,
+                  animationDelay: `${i * 0.4}s`
+                }}/>
+            ))}
+            {/* Radar sweep */}
+            <div className="absolute rounded-full overflow-hidden" style={{width:380, height:380}}>
+              <div className="radar-spin absolute inset-0" style={{
+                background: 'conic-gradient(from 0deg, rgba(0,212,255,0.0) 0deg, rgba(0,212,255,0.15) 30deg, rgba(0,212,255,0.0) 60deg)',
+              }}/>
+            </div>
+            {/* Logo center watermark */}
+            <div className="float-anim relative flex items-center justify-center" style={{width:'80px',height:'80px'}}>
+              <img src="assets/aptrg.png" alt="APTRG" style={{width:'72px',height:'72px',objectFit:'contain',filter:'drop-shadow(0 0 20px rgba(0,212,255,0.6)) brightness(1.1)',opacity:0.55}}
+                onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='block'; }}/>
+              <div style={{display:'none',color:'rgba(0,212,255,0.5)'}}>{icons.drone}</div>
+            </div>
+          </div>
+
+          {/* Decorative lines */}
+          <div className="absolute top-0 left-0 w-px h-full opacity-20" style={{background:'linear-gradient(to bottom, transparent, var(--primary), transparent)'}}/>
+          <div className="absolute top-0 right-24 w-px h-full opacity-10" style={{background:'linear-gradient(to bottom, transparent, var(--primary), transparent)'}}/>
+
+          {/* Content */}
+          <div className="relative z-10 max-w-7xl mx-auto px-6 pt-24">
+            <div className="max-w-3xl">
+              {/* Tag */}
+              <div className="flex items-center gap-3 mb-6 fade-in">
+                <div className="w-2 h-2 rounded-full bg-success" style={{boxShadow:'0 0 10px var(--success)'}}/>
+                <span className="tag text-success" style={{borderColor:'rgba(0,255,136,0.3)'}}>
+                  SYSTEM ONLINE — LAB AKTIF
+                </span>
+              </div>
+
+              {/* Logo + Title row */}
+              <div className="flex items-center gap-6 mb-4 slide-in">
+                <div className="relative flex-shrink-0">
+                  <img src="assets/aptrg.png" alt="APTRG Logo" style={{width:'80px',height:'80px',objectFit:'contain',filter:'drop-shadow(0 0 16px rgba(0,212,255,0.7))'}}
+                    onError={e => { e.target.style.display='none'; }}/>
+                </div>
+                <h1 className="hero-title text-white"
+                  style={{fontSize:'clamp(2.8rem, 7vw, 5.5rem)', letterSpacing:'-0.02em'}}>
+                  <span style={{color:'var(--primary)'}} className="glow-cyan">APTRG</span>
+                </h1>
+              </div>
+
+              {/* Typed subtitle */}
+              <div className="hero-subtitle text-primary opacity-80 mb-6 mt-2" style={{fontSize:'clamp(0.75rem, 2vw, 1rem)', letterSpacing:'0.1em'}}>
+                {typed}<span className="blink-cursor text-primary">_</span>
+              </div>
+
+              {/* Description */}
+              <p className="text-gray-400 mb-10 max-w-xl leading-relaxed slide-in" style={{fontSize:'1.05rem', animationDelay:'0.2s'}}>
+                Laboratorium riset terdepan yang berfokus pada pengembangan wahana udara tak berawak,
+                sistem payload, dan teknologi telemetri generasi berikutnya.
+              </p>
+
+              {/* CTA buttons */}
+              <div className="flex flex-wrap gap-4 slide-in" style={{animationDelay:'0.4s'}}>
+                <button className="btn-primary flex items-center gap-2">
+                  <span>EXPLORE DIVISI</span>
+                  <span style={{position:'relative',zIndex:1}}>{icons.arrow}</span>
+                </button>
+                <button className="btn-accent flex items-center gap-2">
+                  <span>TENTANG KAMI</span>
+                </button>
+              </div>
+
+              {/* Quick stats */}
+              <div className="flex flex-wrap gap-8 mt-14 pt-8 slide-in" style={{borderTop:'1px solid rgba(0,212,255,0.1)', animationDelay:'0.6s'}}>
+                {[
+                  { num: '4', label: 'DIVISI AKTIF' },
+                  { num: '2+', label: 'TAHUN BERDIRI' },
+                  { num: '∞', label: 'INOVASI' },
+                ].map((s, i) => (
+                  <div key={i} className="flex flex-col">
+                    <span className="stat-num text-primary glow-cyan" style={{fontSize:'2rem'}}>{s.num}</span>
+                    <span className="text-xs tracking-widest opacity-50" style={{fontFamily:'Share Tech Mono'}}>{s.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom gradient fade */}
+          <div className="absolute bottom-0 left-0 right-0 h-32"
+            style={{background:'linear-gradient(to top, var(--dark), transparent)'}}/>
+
+          {/* Scroll indicator */}
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-40">
+            <span className="text-xs tracking-widest" style={{fontFamily:'Share Tech Mono'}}>SCROLL</span>
+            <div className="w-px h-12" style={{background:'linear-gradient(to bottom, var(--primary), transparent)'}}/>
+          </div>
+        </section>
+      );
+    }
+
+    // ---- ABOUT ----
+    function About() {
+      return (
+        <section id="about" className="relative py-28 overflow-hidden" style={{background:'var(--surface)'}}>
+          <div className="absolute inset-0 grid-bg opacity-30"/>
+
+          <div className="relative max-w-7xl mx-auto px-6">
+            <div className="grid lg:grid-cols-2 gap-16 items-center">
+              {/* Left */}
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-px w-10 bg-primary opacity-60"/>
+                  <span className="tag text-primary" style={{borderColor:'rgba(0,212,255,0.3)'}}>TENTANG LABORATORIUM</span>
+                </div>
+                <h2 className="text-white mb-6" style={{fontFamily:'Orbitron', fontSize:'clamp(1.8rem, 4vw, 3rem)', fontWeight:700, lineHeight:1.15}}>
+                  Pioneering The<br/>
+                  <span style={{color:'var(--primary)'}}>Future of UAV</span><br/>
+                  Technology
+                </h2>
+                <p className="text-gray-400 leading-relaxed mb-5 text-base">
+                  <strong className="text-gray-200">Laboratorium APTRG</strong> (Aeromodelling Payload and Telemetry Research Group)
+                  adalah pusat riset dan pengembangan yang berdedikasi dalam inovasi teknologi wahana udara tak berawak —
+                  mulai dari perancangan mekanik, sistem kontrol autopilot, integrasi sistem, hingga manajemen operasional.
+                </p>
+                <p className="text-gray-500 leading-relaxed text-sm">
+                  Dengan empat divisi spesialis yang saling berkolaborasi, APTRG menghadirkan ekosistem riset yang
+                  menyeluruh dan berorientasi pada solusi nyata di bidang aeromodelling dan teknologi telemetri.
+                </p>
+
+                {/* Feature tags */}
+                <div className="flex flex-wrap gap-2 mt-8">
+                  {['UAV Research', 'Autopilot', 'Telemetry', 'Payload Integration', 'GCS Systems'].map(tag => (
+                    <span key={tag} className="tag text-gray-400" style={{borderColor:'rgba(255,255,255,0.1)', fontSize:'0.68rem'}}>
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right — HUD visual */}
+              <div className="relative">
+                {/* Outer frame */}
+                <div className="relative p-8 box-glow" style={{border:'1px solid rgba(0,212,255,0.15)', background:'rgba(8,15,26,0.8)'}}>
+                  <div className="hud-corner hud-tl" style={{width:'24px',height:'24px'}}/>
+                  <div className="hud-corner hud-tr" style={{width:'24px',height:'24px'}}/>
+                  <div className="hud-corner hud-bl" style={{width:'24px',height:'24px'}}/>
+                  <div className="hud-corner hud-br" style={{width:'24px',height:'24px'}}/>
+
+                  {/* Header bar */}
+                  <div className="flex items-center justify-between mb-6 pb-4" style={{borderBottom:'1px solid rgba(0,212,255,0.1)'}}>
+                    <div className="flex items-center gap-3">
+                      <img src="assets/aptrg.png" alt="APTRG" style={{width:'32px',height:'32px',objectFit:'contain',filter:'drop-shadow(0 0 8px rgba(0,212,255,0.6))'}}
+                        onError={e => e.target.style.display='none'}/>
+                      <span className="text-primary text-xs" style={{fontFamily:'Share Tech Mono', letterSpacing:'0.15em'}}>APTRG — SYSTEM STATUS</span>
+                    </div>
+                    <div className="flex gap-2">
+                      {['online','online','online','online'].map((s,i) => (
+                        <div key={i} className="w-2 h-2 rounded-full bg-success" style={{boxShadow:'0 0 6px var(--success)', animationDelay:`${i*0.4}s`, animation:'pulseGlow 2s ease-in-out infinite'}}/>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Data rows */}
+                  {[
+                    { label: 'DIVISION COUNT', value: '04', color: 'var(--primary)' },
+                    { label: 'OPERATIONAL STATUS', value: 'ACTIVE', color: 'var(--success)' },
+                    { label: 'FOCUS AREA', value: 'UAV / TELEMETRY', color: 'var(--primary)' },
+                    { label: 'RESEARCH MODE', value: 'CONTINUOUS', color: 'var(--accent)' },
+                  ].map((row, i) => (
+                    <div key={i} className="flex items-center justify-between py-3" style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                      <span className="text-gray-500 text-xs tracking-wider" style={{fontFamily:'Share Tech Mono'}}>{row.label}</span>
+                      <span className="font-bold text-sm" style={{fontFamily:'Share Tech Mono', color: row.color}}>{row.value}</span>
+                    </div>
+                  ))}
+
+                  {/* Signal strength visual */}
+                  <div className="mt-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-gray-500 text-xs" style={{fontFamily:'Share Tech Mono', letterSpacing:'0.1em'}}>SIGNAL STRENGTH</span>
+                      <span className="text-primary text-xs" style={{fontFamily:'Share Tech Mono'}}>98.7%</span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full" style={{background:'rgba(255,255,255,0.06)'}}>
+                      <div className="h-full rounded-full" style={{width:'98.7%', background:'linear-gradient(90deg, var(--primary), var(--success))', boxShadow:'0 0 10px var(--primary)'}}/>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Floating badge */}
+                <div className="absolute -top-4 -right-4 px-4 py-2"
+                  style={{background:'var(--accent)', fontFamily:'Orbitron', fontSize:'0.7rem', fontWeight:700, letterSpacing:'0.1em'}}>
+                  EST. RESEARCH LAB
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ---- DIVISIONS ----
+    const divisions = [
+      {
+        id: 'mechanic',
+        code: 'DIV-01',
+        name: 'Mechanic',
+        fullName: 'Divisi Mekanik',
+        color: '#00d4ff',
+        colorRgb: '0,212,255',
+        icon: icons.mechanic,
+        tag: 'ENGINEERING',
+        desc: 'Divisi mekanik pada laboratorium APTRG adalah divisi yang bertugas dalam perancangan sistem dan elektronika wahana. Bertanggung jawab atas integritas struktural, komponen fisik, dan sistem elektronika yang menjadi tulang punggung setiap wahana UAV.',
+        tasks: ['Perancangan struktur wahana', 'Integrasi elektronika', 'Pengujian komponen', 'Dokumentasi teknis'],
+      },
+      {
+        id: 'gcs',
+        code: 'DIV-02',
+        name: 'GCS',
+        fullName: 'Ground Control Station',
+        color: '#ff6b00',
+        colorRgb: '255,107,0',
+        icon: icons.gcs,
+        tag: 'CONTROL',
+        desc: 'Divisi Ground Control Station bertugas pada bagian pusat kontrol darat yang menyediakan fasilitas untuk kendali wahana autopilot di udara. Memastikan komunikasi data real-time dan kendali presisi tinggi antara operator dan wahana.',
+        tasks: ['Kendali autopilot', 'Monitoring telemetri', 'Manajemen komunikasi', 'Interface operasional'],
+      },
+      {
+        id: 'sistem',
+        code: 'DIV-03',
+        name: 'Sistem',
+        fullName: 'Divisi Sistem',
+        color: '#00ff88',
+        colorRgb: '0,255,136',
+        icon: icons.sistem,
+        tag: 'INTEGRATION',
+        desc: 'Divisi Sistem — suatu kesatuan yang terdiri dari komponen atau elemen yang dihubungkan bersama untuk memudahkan aliran informasi, materi, atau energi. Divisi ini memastikan semua subsistem berjalan secara harmonis dan efisien.',
+        tasks: ['Integrasi subsistem', 'Aliran data & energi', 'Optimasi performa', 'Analisis sistem'],
+      },
+      {
+        id: 'umum',
+        code: 'DIV-04',
+        name: 'Umum',
+        fullName: 'Divisi Non-Tech / Umum',
+        color: '#a78bfa',
+        colorRgb: '167,139,250',
+        icon: icons.umum,
+        tag: 'OPERATIONS',
+        desc: 'Divisi Umum mengelola segala hal umum dan keorganisasian laboratorium APTRG — dari setup instalasi awal, penyusunan rencana kegiatan, pengelolaan surat menyurat, sandi dan telekomunikasi, hingga kearsipan yang diperlukan.',
+        tasks: ['Manajemen organisasi', 'Surat & administrasi', 'Sandi & telekomunikasi', 'Kearsipan & dokumentasi'],
+      },
+    ];
+
+    function DivisionCard({ div, index }) {
+      const [hovered, setHovered] = useState(false);
+      const delay = index * 0.1;
+
+      return (
+        <div className="div-card box-glow-hover p-7 fade-in"
+          style={{
+            background: 'rgba(8,15,26,0.8)',
+            border: `1px solid rgba(${div.colorRgb},0.2)`,
+            animationDelay: `${delay}s`,
+            animationFillMode: 'both',
+          }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}>
+
+          {/* Top row */}
+          <div className="flex items-start justify-between mb-5">
+            <div className="flex items-center gap-4">
+              {/* Icon */}
+              <div className="relative w-14 h-14 flex items-center justify-center"
+                style={{
+                  border: `1px solid rgba(${div.colorRgb},0.3)`,
+                  color: div.color,
+                  background: `rgba(${div.colorRgb},0.06)`,
+                  boxShadow: hovered ? `0 0 20px rgba(${div.colorRgb},0.2)` : 'none',
+                  transition: 'box-shadow 0.3s'
+                }}>
+                <div className="hud-corner hud-tl" style={{width:'8px',height:'8px',borderColor:div.color}}/>
+                <div className="hud-corner hud-tr" style={{width:'8px',height:'8px',borderColor:div.color}}/>
+                <div className="hud-corner hud-bl" style={{width:'8px',height:'8px',borderColor:div.color}}/>
+                <div className="hud-corner hud-br" style={{width:'8px',height:'8px',borderColor:div.color}}/>
+                {div.icon}
+              </div>
+              <div>
+                <div className="text-xs tracking-widest mb-1 opacity-50" style={{fontFamily:'Share Tech Mono', color:div.color}}>{div.code}</div>
+                <h3 className="text-white font-bold" style={{fontFamily:'Orbitron', fontSize:'1.1rem'}}>{div.name}</h3>
+              </div>
+            </div>
+            <span className="tag" style={{color: div.color, borderColor:`rgba(${div.colorRgb},0.3)`, fontSize:'0.6rem'}}>
+              {div.tag}
+            </span>
+          </div>
+
+          <div className="mb-1 font-semibold text-sm" style={{color:div.color, fontFamily:'Rajdhani', letterSpacing:'0.05em'}}>
+            {div.fullName}
+          </div>
+
+          <p className="text-gray-400 text-sm leading-relaxed mb-5">{div.desc}</p>
+
+          {/* Tasks */}
+          <div className="space-y-2">
+            {div.tasks.map((task, i) => (
+              <div key={i} className="flex items-center gap-3 text-xs text-gray-500" style={{fontFamily:'Share Tech Mono'}}>
+                <div className="w-1 h-1 rounded-full flex-shrink-0" style={{background:div.color, boxShadow:`0 0 6px ${div.color}`}}/>
+                {task}
+              </div>
+            ))}
+          </div>
+
+          {/* Bottom progress bar */}
+          <div className="mt-6 h-px w-full" style={{background:`linear-gradient(90deg, rgba(${div.colorRgb},0.5), transparent)`}}/>
+        </div>
+      );
+    }
+
+    function Divisions() {
+      return (
+        <section id="divisions" className="py-28 relative" style={{background:'var(--dark)'}}>
+          <div className="absolute inset-0 grid-bg opacity-20"/>
+
+          <div className="relative max-w-7xl mx-auto px-6">
+            {/* Section header */}
+            <div className="text-center mb-16">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="h-px w-12 bg-primary opacity-40"/>
+                <span className="tag text-primary" style={{borderColor:'rgba(0,212,255,0.3)'}}>STRUKTUR ORGANISASI</span>
+                <div className="h-px w-12 bg-primary opacity-40"/>
+              </div>
+              <h2 className="text-white" style={{fontFamily:'Orbitron', fontSize:'clamp(1.8rem, 4vw, 3rem)', fontWeight:700}}>
+                4 DIVISI <span style={{color:'var(--primary)'}}>LABORATORIUM</span>
+              </h2>
+              <p className="text-gray-500 mt-4 max-w-xl mx-auto text-sm leading-relaxed">
+                Setiap divisi memiliki peran krusial dan saling berkolaborasi untuk menghadirkan
+                solusi UAV yang inovatif dan komprehensif.
+              </p>
+            </div>
+
+            {/* Cards grid */}
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+              {divisions.map((div, i) => (
+                <DivisionCard key={div.id} div={div} index={i}/>
+              ))}
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ---- STATS ----
+    function StatCard({ num, label, sub, color }) {
+      return (
+        <div className="text-center py-8 px-4 relative" style={{border:'1px solid rgba(0,212,255,0.08)', background:'rgba(8,15,26,0.5)'}}>
+          <div className="hud-corner hud-tl"/>
+          <div className="hud-corner hud-tr"/>
+          <div className="hud-corner hud-bl"/>
+          <div className="hud-corner hud-br"/>
+          <div className="stat-num glow-cyan mb-1" style={{fontSize:'3rem', color: color || 'var(--primary)'}}>{num}</div>
+          <div className="text-white font-semibold text-base mb-1">{label}</div>
+          {sub && <div className="text-gray-500 text-xs" style={{fontFamily:'Share Tech Mono'}}>{sub}</div>}
+        </div>
+      );
+    }
+
+    function Stats() {
+      return (
+        <section id="stats" className="py-24 relative" style={{background:'var(--surface)'}}>
+          <div className="absolute inset-0 grid-bg opacity-25"/>
+          {/* Watermark logo */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
+            <img src="assets/aptrg.png" alt="" style={{width:'320px',height:'320px',objectFit:'contain',opacity:0.03,filter:'brightness(5)'}}
+              onError={e => e.target.style.display='none'}/>
+          </div>
+          <div className="relative max-w-7xl mx-auto px-6">
+            <div className="text-center mb-14">
+              <h2 className="text-white" style={{fontFamily:'Orbitron', fontSize:'clamp(1.5rem, 3.5vw, 2.5rem)', fontWeight:700}}>
+                LABORATORIUM <span style={{color:'var(--primary)'}}>DALAM ANGKA</span>
+              </h2>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard num="4" label="Divisi Aktif" sub="OPERATIONAL" color="var(--primary)"/>
+              <StatCard num="UAV" label="Focus Research" sub="AUTONOMOUS FLIGHT" color="var(--accent)"/>
+              <StatCard num="360°" label="Coverage" sub="TELEMETRY RANGE" color="var(--success)"/>
+              <StatCard num="24/7" label="Research Mode" sub="CONTINUOUS OPS" color="#a78bfa"/>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ---- FLOW / ECOSYSTEM ----
+    function Ecosystem() {
+      return (
+        <section className="py-28 relative overflow-hidden" style={{background:'var(--darker)'}}>
+          <div className="absolute inset-0 grid-bg opacity-15"/>
+
+          {/* Decorative horizontal line */}
+          <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-px opacity-5" style={{background:'var(--primary)'}}/>
+
+          <div className="relative max-w-7xl mx-auto px-6">
+            <div className="text-center mb-16">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="h-px w-12 bg-accent opacity-40"/>
+                <span className="tag text-accent" style={{borderColor:'rgba(255,107,0,0.3)'}}>ALUR KERJA</span>
+                <div className="h-px w-12 bg-accent opacity-40"/>
+              </div>
+              <h2 className="text-white" style={{fontFamily:'Orbitron', fontSize:'clamp(1.5rem, 3.5vw, 2.5rem)', fontWeight:700}}>
+                EKOSISTEM <span style={{color:'var(--accent)'}}>RISET</span>
+              </h2>
+            </div>
+
+            {/* Flow diagram */}
+            <div className="flex flex-col md:flex-row items-center justify-center gap-4">
+              {[
+                { label: 'Perancangan', sub: 'Mechanic', icon: '⚙️', color: 'var(--primary)' },
+                { label: '→', sub: '', icon: '', color: 'var(--primary)', arrow: true },
+                { label: 'Integrasi', sub: 'Sistem', icon: '🔗', color: 'var(--success)' },
+                { label: '→', sub: '', icon: '', color: 'var(--primary)', arrow: true },
+                { label: 'Kendali', sub: 'GCS', icon: '📡', color: 'var(--accent)' },
+                { label: '→', sub: '', icon: '', color: 'var(--primary)', arrow: true },
+                { label: 'Operasional', sub: 'Umum', icon: '📋', color: '#a78bfa' },
+              ].map((item, i) => (
+                item.arrow ? (
+                  <div key={i} className="text-primary opacity-40 text-2xl font-bold hidden md:block"
+                    style={{fontFamily:'Share Tech Mono'}}>→</div>
+                ) : (
+                  <div key={i} className="text-center p-5 flex-1 max-w-[140px]"
+                    style={{border:`1px solid rgba(255,255,255,0.06)`, background:'rgba(8,15,26,0.6)'}}>
+                    <div className="text-2xl mb-2">{item.icon}</div>
+                    <div className="font-bold text-white text-sm mb-1" style={{fontFamily:'Orbitron',fontSize:'0.75rem'}}>{item.label}</div>
+                    <div className="text-xs" style={{color:item.color, fontFamily:'Share Tech Mono'}}>{item.sub}</div>
+                  </div>
+                )
+              ))}
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ---- CONTACT ----
+    function Contact() {
+      return (
+        <section id="contact" className="py-28 relative" style={{background:'var(--surface)'}}>
+          <div className="absolute inset-0 grid-bg opacity-20"/>
+          <div className="relative max-w-4xl mx-auto px-6 text-center">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <div className="h-px w-12 bg-primary opacity-40"/>
+              <span className="tag text-primary" style={{borderColor:'rgba(0,212,255,0.3)'}}>KONTAK</span>
+              <div className="h-px w-12 bg-primary opacity-40"/>
+            </div>
+            {/* Logo above heading */}
+            <div className="flex justify-center mb-5">
+              <div className="relative p-3" style={{border:'1px solid rgba(0,212,255,0.15)', background:'rgba(0,212,255,0.04)'}}>
+                <div className="hud-corner hud-tl" style={{width:'10px',height:'10px'}}/>
+                <div className="hud-corner hud-tr" style={{width:'10px',height:'10px'}}/>
+                <div className="hud-corner hud-bl" style={{width:'10px',height:'10px'}}/>
+                <div className="hud-corner hud-br" style={{width:'10px',height:'10px'}}/>
+                <img src="assets/aptrg.png" alt="APTRG Logo" style={{width:'72px',height:'72px',objectFit:'contain',filter:'drop-shadow(0 0 14px rgba(0,212,255,0.65))'}}
+                  onError={e => e.target.style.display='none'}/>
+              </div>
+            </div>
+            <h2 className="text-white mb-6" style={{fontFamily:'Orbitron', fontSize:'clamp(1.8rem, 4vw, 3rem)', fontWeight:700}}>
+              BERGABUNG DENGAN<br/><span style={{color:'var(--primary)'}}>APTRG</span>
+            </h2>
+            <p className="text-gray-400 mb-12 max-w-xl mx-auto leading-relaxed">
+              Tertarik untuk menjadi bagian dari ekosistem riset UAV terdepan?
+              Bergabunglah dengan kami dan kontribusikan keahlianmu dalam salah satu divisi laboratorium APTRG.
+            </p>
+
+            {/* Contact cards */}
+            <div className="grid md:grid-cols-3 gap-4 mb-10">
+              {[
+                { icon: '📧', label: 'EMAIL', value: 'aptrg@lab.ac.id', color: 'var(--primary)' },
+                { icon: '📡', label: 'FREKUENSI', value: 'Always On Air', color: 'var(--success)' },
+                { icon: '📍', label: 'LOKASI', value: 'Laboratorium APTRG', color: 'var(--accent)' },
+              ].map((c, i) => (
+                <div key={i} className="p-6 relative" style={{border:'1px solid rgba(0,212,255,0.1)', background:'rgba(8,15,26,0.6)'}}>
+                  <div className="hud-corner hud-tl" style={{width:'10px',height:'10px'}}/>
+                  <div className="hud-corner hud-tr" style={{width:'10px',height:'10px'}}/>
+                  <div className="hud-corner hud-bl" style={{width:'10px',height:'10px'}}/>
+                  <div className="hud-corner hud-br" style={{width:'10px',height:'10px'}}/>
+                  <div className="text-2xl mb-3">{c.icon}</div>
+                  <div className="text-xs tracking-widest mb-1 opacity-50" style={{fontFamily:'Share Tech Mono', color:c.color}}>{c.label}</div>
+                  <div className="text-white text-sm font-semibold">{c.value}</div>
+                </div>
+              ))}
+            </div>
+
+            <button className="btn-primary text-base px-12 py-3">
+              <span>DAFTAR SEKARANG</span>
+            </button>
+          </div>
+        </section>
+      );
+    }
+
+    // ---- FOOTER ----
+    function Footer() {
+      return (
+        <footer style={{background:'var(--darker)', borderTop:'1px solid rgba(0,212,255,0.08)'}}>
+          <div className="max-w-7xl mx-auto px-6 py-10">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex items-center gap-3">
+                <img src="assets/aptrg.png" alt="APTRG Logo" style={{width:'40px',height:'40px',objectFit:'contain',filter:'drop-shadow(0 0 8px rgba(0,212,255,0.5))'}}
+                  onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}/>
+                <div className="hidden items-center justify-center" style={{width:'36px',height:'36px',border:'1px solid rgba(0,212,255,0.3)',position:'relative'}}>
+                  <div className="hud-corner hud-tl" style={{width:'7px',height:'7px'}}/>
+                  <div className="hud-corner hud-tr" style={{width:'7px',height:'7px'}}/>
+                  <div className="hud-corner hud-bl" style={{width:'7px',height:'7px'}}/>
+                  <div className="hud-corner hud-br" style={{width:'7px',height:'7px'}}/>
+                  <span className="text-primary font-bold" style={{fontFamily:'Orbitron',fontSize:'0.65rem'}}>AP</span>
+                </div>
+                <div>
+                  <div className="text-primary font-bold text-sm" style={{fontFamily:'Orbitron',letterSpacing:'0.15em'}}>APTRG</div>
+                  <div className="text-xs opacity-30" style={{fontFamily:'Share Tech Mono',fontSize:'0.55rem'}}>AEROMODELLING PAYLOAD & TELEMETRY RESEARCH GROUP</div>
+                </div>
+              </div>
+
+              <div className="flex gap-8">
+                {['Mechanic','GCS','Sistem','Umum'].map(d => (
+                  <a key={d} href="#divisions" className="text-xs text-gray-500 hover:text-primary transition-colors" style={{fontFamily:'Share Tech Mono', letterSpacing:'0.08em'}}>
+                    {d.toUpperCase()}
+                  </a>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-gray-600" style={{fontFamily:'Share Tech Mono'}}>
+                <div className="w-1.5 h-1.5 rounded-full bg-success" style={{boxShadow:'0 0 6px var(--success)'}}/>
+                SYSTEM ONLINE
+              </div>
+            </div>
+
+            <div className="mt-8 pt-6 text-center text-xs text-gray-600" style={{fontFamily:'Share Tech Mono', borderTop:'1px solid rgba(255,255,255,0.03)', letterSpacing:'0.1em'}}>
+              © {new Date().getFullYear()} APTRG — AEROMODELLING PAYLOAD & TELEMETRY RESEARCH GROUP. ALL RIGHTS RESERVED.
+            </div>
+          </div>
+        </footer>
+      );
+    }
+
+    // ---- TEAM ----
+    const teamMembers = [
+      { name: 'Team Member', role: 'Ketua Laboratorium', division: 'Mechanic', divColor: '#00d4ff', img: 'assets/team/member1.png' },
+      { name: 'Team Member', role: 'Kepala Divisi GCS', division: 'GCS', divColor: '#ff6b00', img: 'assets/team/member2.png' },
+      { name: 'Team Member', role: 'Kepala Divisi Sistem', division: 'Sistem', divColor: '#00ff88', img: 'assets/team/member3.png' },
+      { name: 'Team Member', role: 'Kepala Divisi Umum', division: 'Umum', divColor: '#a78bfa', img: 'assets/team/member4.png' },
+      { name: 'Team Member', role: 'Anggota Mechanic', division: 'Mechanic', divColor: '#00d4ff', img: 'assets/team/member5.png' },
+      { name: 'Team Member', role: 'Anggota GCS', division: 'GCS', divColor: '#ff6b00', img: 'assets/team/member6.png' },
+      { name: 'Team Member', role: 'Anggota Sistem', division: 'Sistem', divColor: '#00ff88', img: 'assets/team/member7.png' },
+      { name: 'Team Member', role: 'Anggota Umum', division: 'Umum', divColor: '#a78bfa', img: 'assets/team/member8.png' },
+    ];
+
+    function TeamCard({ member, index }) {
+      const [imgError, setImgError] = useState(false);
+      const initials = member.name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+
+      return (
+        <div className="div-card group fade-in"
+          style={{
+            border: `1px solid rgba(255,255,255,0.06)`,
+            background: 'rgba(8,15,26,0.7)',
+            animationDelay: `${index * 0.08}s`,
+            animationFillMode: 'both',
+          }}>
+
+          {/* Photo area */}
+          <div className="relative overflow-hidden" style={{aspectRatio:'1/1', background:'rgba(4,8,16,0.8)'}}>
+            {/* Top scan line sweep on hover */}
+            <div className="absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+              style={{background:'linear-gradient(180deg, transparent 0%, rgba(0,212,255,0.06) 50%, transparent 100%)'}}/>
+
+            {/* Corner HUD brackets */}
+            <div className="hud-corner hud-tl" style={{width:'14px',height:'14px',borderColor:member.divColor,zIndex:20}}/>
+            <div className="hud-corner hud-tr" style={{width:'14px',height:'14px',borderColor:member.divColor,zIndex:20}}/>
+            <div className="hud-corner hud-bl" style={{width:'14px',height:'14px',borderColor:member.divColor,zIndex:20}}/>
+            <div className="hud-corner hud-br" style={{width:'14px',height:'14px',borderColor:member.divColor,zIndex:20}}/>
+
+            {!imgError ? (
+              <img
+                src={member.img}
+                alt={member.name}
+                onError={() => setImgError(true)}
+                className="w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
+                style={{filter:'grayscale(20%) contrast(1.05)'}}
+              />
+            ) : (
+              /* Fallback avatar */
+              <div className="w-full h-full flex flex-col items-center justify-center gap-3"
+                style={{background:`radial-gradient(circle at center, rgba(${member.divColor === '#00d4ff' ? '0,212,255' : member.divColor === '#ff6b00' ? '255,107,0' : member.divColor === '#00ff88' ? '0,255,136' : '167,139,250'},0.08) 0%, transparent 70%)`}}>
+                <div className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold"
+                  style={{background:`rgba(255,255,255,0.04)`, border:`1px solid ${member.divColor}40`, color:member.divColor, fontFamily:'Orbitron'}}>
+                  {initials}
+                </div>
+                <div className="text-xs opacity-30" style={{fontFamily:'Share Tech Mono', letterSpacing:'0.1em'}}>NO PHOTO</div>
+              </div>
+            )}
+
+            {/* Division badge overlay */}
+            <div className="absolute top-3 right-3 z-20">
+              <span className="tag" style={{color:member.divColor, borderColor:`${member.divColor}50`, fontSize:'0.55rem', background:'rgba(4,8,16,0.85)', backdropFilter:'blur(4px)'}}>
+                {member.division.toUpperCase()}
+              </span>
+            </div>
+
+            {/* Bottom gradient overlay */}
+            <div className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
+              style={{background:'linear-gradient(to top, rgba(8,15,26,0.95), transparent)'}}/>
+          </div>
+
+          {/* Info */}
+          <div className="p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="text-white font-bold text-base leading-tight mb-1 group-hover:text-primary transition-colors duration-300"
+                  style={{fontFamily:'Rajdhani', letterSpacing:'0.03em'}}>
+                  {member.name}
+                </h3>
+                <div className="text-xs opacity-60" style={{fontFamily:'Share Tech Mono', color:member.divColor}}>
+                  {member.role}
+                </div>
+              </div>
+              {/* Status dot */}
+              <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0 pulse-glow" style={{background:member.divColor, boxShadow:`0 0 8px ${member.divColor}`}}/>
+            </div>
+            {/* Bottom accent line */}
+            <div className="mt-4 h-px" style={{background:`linear-gradient(90deg, ${member.divColor}60, transparent)`}}/>
+          </div>
+        </div>
+      );
+    }
+
+    function Team() {
+      const [filter, setFilter] = useState('ALL');
+      const filters = ['ALL', 'Mechanic', 'GCS', 'Sistem', 'Umum'];
+      const divColors = { Mechanic:'#00d4ff', GCS:'#ff6b00', Sistem:'#00ff88', Umum:'#a78bfa' };
+
+      const filtered = filter === 'ALL' ? teamMembers : teamMembers.filter(m => m.division === filter);
+
+      return (
+        <section id="team" className="py-28 relative" style={{background:'var(--darker)'}}>
+          <div className="absolute inset-0 grid-bg opacity-20"/>
+
+          {/* Decorative vertical lines */}
+          <div className="absolute top-0 left-1/4 w-px h-full opacity-5" style={{background:'linear-gradient(to bottom, transparent, var(--primary), transparent)'}}/>
+          <div className="absolute top-0 right-1/4 w-px h-full opacity-5" style={{background:'linear-gradient(to bottom, transparent, var(--accent), transparent)'}}/>
+
+          <div className="relative max-w-7xl mx-auto px-6">
+            {/* Header */}
+            <div className="text-center mb-14">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="h-px w-12 bg-primary opacity-40"/>
+                <span className="tag text-primary" style={{borderColor:'rgba(0,212,255,0.3)'}}>SDM LABORATORIUM</span>
+                <div className="h-px w-12 bg-primary opacity-40"/>
+              </div>
+              <h2 className="text-white mb-4" style={{fontFamily:'Orbitron', fontSize:'clamp(1.8rem, 4vw, 3rem)', fontWeight:700}}>
+                TIM <span style={{color:'var(--primary)'}}>APTRG</span>
+              </h2>
+              <p className="text-gray-500 max-w-lg mx-auto text-sm leading-relaxed">
+                Para peneliti dan anggota aktif yang mendorong inovasi UAV
+                dan teknologi telemetri di laboratorium APTRG.
+              </p>
+            </div>
+
+            {/* Filter tabs */}
+            <div className="flex flex-wrap items-center justify-center gap-2 mb-12">
+              {filters.map(f => (
+                <button key={f} onClick={() => setFilter(f)}
+                  className="tag transition-all duration-200 cursor-pointer"
+                  style={{
+                    color: filter === f ? (f === 'ALL' ? 'var(--dark)' : divColors[f] || 'var(--dark)') : 'rgba(200,216,232,0.4)',
+                    borderColor: filter === f ? (f === 'ALL' ? 'var(--primary)' : divColors[f] || 'var(--primary)') : 'rgba(255,255,255,0.08)',
+                    background: filter === f ? (f === 'ALL' ? 'var(--primary)' : divColors[f] || 'var(--primary)') : 'transparent',
+                    fontSize: '0.68rem',
+                    padding: '5px 16px',
+                    fontFamily: 'Share Tech Mono',
+                    letterSpacing: '0.12em',
+                  }}>
+                  {f}
+                </button>
+              ))}
+            </div>
+
+            {/* Team photo banner — full width group photo */}
+            <div className="relative mb-12 overflow-hidden" style={{border:'1px solid rgba(0,212,255,0.1)'}}>
+              <div className="hud-corner hud-tl" style={{width:'20px',height:'20px'}}/>
+              <div className="hud-corner hud-tr" style={{width:'20px',height:'20px'}}/>
+              <div className="hud-corner hud-bl" style={{width:'20px',height:'20px'}}/>
+              <div className="hud-corner hud-br" style={{width:'20px',height:'20px'}}/>
+
+              {/* Group photo */}
+              <div className="relative" style={{aspectRatio:'21/8', minHeight:'180px', background:'rgba(4,8,16,0.9)'}}>
+                <img src="assets/team/group.png" alt="APTRG Team Photo"
+                  className="w-full h-full object-cover"
+                  style={{filter:'grayscale(15%) contrast(1.05)'}}
+                  onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}/>
+                {/* Fallback */}
+                <div className="absolute inset-0 hidden items-center justify-center flex-col gap-3" style={{background:'radial-gradient(ellipse at center, rgba(0,212,255,0.05) 0%, transparent 70%)'}}>
+                  <div style={{color:'rgba(0,212,255,0.2)', fontFamily:'Orbitron', fontSize:'clamp(1rem,3vw,2rem)', fontWeight:700, letterSpacing:'0.2em'}}>
+                    APTRG TEAM
+                  </div>
+                  <div style={{color:'rgba(0,212,255,0.15)', fontFamily:'Share Tech Mono', fontSize:'0.7rem', letterSpacing:'0.2em'}}>
+                    FOTO TIM — assets/team/group.png
+                  </div>
+                </div>
+
+                {/* Overlay gradient */}
+                <div className="absolute inset-0 pointer-events-none"
+                  style={{background:'linear-gradient(to right, rgba(2,5,8,0.5) 0%, transparent 20%, transparent 80%, rgba(2,5,8,0.5) 100%)'}}/>
+                <div className="absolute bottom-0 left-0 right-0 h-24 pointer-events-none"
+                  style={{background:'linear-gradient(to top, rgba(2,5,8,0.8), transparent)'}}/>
+
+                {/* Label */}
+                <div className="absolute bottom-4 left-6 flex items-center gap-3">
+                  <img src="assets/aptrg.png" alt="APTRG" style={{width:'28px',height:'28px',objectFit:'contain',filter:'drop-shadow(0 0 6px rgba(0,212,255,0.6))'}}
+                    onError={e => e.target.style.display='none'}/>
+                  <div>
+                    <div style={{fontFamily:'Orbitron', fontSize:'0.75rem', color:'var(--primary)', letterSpacing:'0.15em', fontWeight:700}}>APTRG TEAM</div>
+                    <div style={{fontFamily:'Share Tech Mono', fontSize:'0.6rem', color:'rgba(200,216,232,0.4)', letterSpacing:'0.1em'}}>FOTO BERSAMA</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Members grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              {filtered.map((member, i) => (
+                <TeamCard key={i} member={member} index={i}/>
+              ))}
+            </div>
+
+            {/* Bottom note */}
+            <div className="text-center mt-10">
+              <p className="text-xs opacity-30" style={{fontFamily:'Share Tech Mono', letterSpacing:'0.15em'}}>
+                GANTI FOTO — assets/team/member1.png s/d member8.png · group.png
+              </p>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ---- VIDEO HIGHLIGHT ----
+    const videos = [
+      { id: 'v1', title: 'APTRG Flight Test 2024', desc: 'Uji terbang wahana terbaru dengan sistem autopilot generasi baru di lapangan uji APTRG.', src: 'assets/videos/highlight1.mp4', thumb: 'assets/videos/thumb1.png', duration: '2:34', tag: 'FLIGHT TEST' },
+      { id: 'v2', title: 'GCS Live Demo', desc: 'Demonstrasi Ground Control Station real-time dengan telemetri penuh dan kendali autopilot.', src: 'assets/videos/highlight2.mp4', thumb: 'assets/videos/thumb2.png', duration: '1:47', tag: 'GCS' },
+      { id: 'v3', title: 'Payload Integration Test', desc: 'Pengujian integrasi payload dan sistem sensor pada wahana fixed-wing generasi ketiga.', src: 'assets/videos/highlight3.mp4', thumb: 'assets/videos/thumb3.png', duration: '3:12', tag: 'PAYLOAD' },
+    ];
+
+    function VideoCard({ video, onPlay, active }) {
+      return (
+        <div className="div-card group cursor-pointer fade-in"
+          style={{border: active ? '1px solid rgba(0,212,255,0.5)' : '1px solid rgba(255,255,255,0.06)', background:'rgba(8,15,26,0.8)'}}
+          onClick={() => onPlay(video)}>
+
+          {/* Thumbnail */}
+          <div className="relative overflow-hidden" style={{aspectRatio:'16/9', background:'rgba(4,8,16,0.9)'}}>
+            <div className="hud-corner hud-tl" style={{width:'12px',height:'12px'}}/>
+            <div className="hud-corner hud-tr" style={{width:'12px',height:'12px'}}/>
+            <div className="hud-corner hud-bl" style={{width:'12px',height:'12px'}}/>
+            <div className="hud-corner hud-br" style={{width:'12px',height:'12px'}}/>
+
+            <img src={video.thumb} alt={video.title}
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              style={{filter:'grayscale(20%) contrast(1.1)'}}
+              onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}/>
+            {/* Fallback thumbnail */}
+            <div className="absolute inset-0 hidden items-center justify-center flex-col gap-2"
+              style={{background:'radial-gradient(circle at center, rgba(0,212,255,0.06) 0%, transparent 70%)'}}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(0,212,255,0.3)" strokeWidth="1">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              <span style={{fontFamily:'Share Tech Mono', fontSize:'0.6rem', color:'rgba(0,212,255,0.2)', letterSpacing:'0.2em'}}>{video.id.toUpperCase()}</span>
+            </div>
+
+            {/* Play button overlay */}
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+              style={{background:'rgba(4,8,16,0.5)'}}>
+              <div className="w-14 h-14 rounded-full flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
+                style={{background:'rgba(0,212,255,0.15)', border:'2px solid rgba(0,212,255,0.6)', backdropFilter:'blur(4px)'}}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--primary)" stroke="none">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+              </div>
+            </div>
+
+            {/* Duration badge */}
+            <div className="absolute bottom-2 right-2 px-2 py-0.5 text-xs"
+              style={{background:'rgba(4,8,16,0.85)', fontFamily:'Share Tech Mono', color:'var(--primary)', border:'1px solid rgba(0,212,255,0.2)', fontSize:'0.65rem'}}>
+              {video.duration}
+            </div>
+
+            {/* Tag badge */}
+            <div className="absolute top-2 left-2">
+              <span className="tag" style={{color:'var(--accent)', borderColor:'rgba(255,107,0,0.4)', background:'rgba(4,8,16,0.85)', fontSize:'0.55rem'}}>
+                {video.tag}
+              </span>
+            </div>
+
+            {/* Active glow */}
+            {active && <div className="absolute inset-0 pointer-events-none" style={{boxShadow:'inset 0 0 30px rgba(0,212,255,0.15)'}}/>}
+          </div>
+
+          <div className="p-4">
+            <h3 className="text-white font-bold text-sm mb-1 group-hover:text-primary transition-colors" style={{fontFamily:'Rajdhani', letterSpacing:'0.03em'}}>{video.title}</h3>
+            <p className="text-gray-500 text-xs leading-relaxed">{video.desc}</p>
+            <div className="mt-3 h-px" style={{background:'linear-gradient(90deg, rgba(0,212,255,0.3), transparent)'}}/>
+          </div>
+        </div>
+      );
+    }
+
+    function VideoHighlight() {
+      const [activeVideo, setActiveVideo] = useState(videos[0]);
+      const [playing, setPlaying] = useState(false);
+      const videoRef = useRef(null);
+
+      const handlePlay = (video) => {
+        setActiveVideo(video);
+        setPlaying(false);
+        setTimeout(() => {
+          if (videoRef.current) { videoRef.current.load(); }
+        }, 50);
+      };
+
+      const togglePlay = () => {
+        if (!videoRef.current) return;
+        if (playing) { videoRef.current.pause(); setPlaying(false); }
+        else { videoRef.current.play().catch(() => {}); setPlaying(true); }
+      };
+
+      return (
+        <section id="highlight" className="py-28 relative overflow-hidden" style={{background:'var(--surface)'}}>
+          <div className="absolute inset-0 grid-bg opacity-20"/>
+          <div className="absolute top-0 left-0 right-0 h-px" style={{background:'linear-gradient(90deg, transparent, var(--primary), transparent)'}}/>
+
+          <div className="relative max-w-7xl mx-auto px-6">
+            {/* Header */}
+            <div className="text-center mb-14">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="h-px w-12 bg-accent opacity-40"/>
+                <span className="tag text-accent" style={{borderColor:'rgba(255,107,0,0.3)'}}>DOKUMENTASI</span>
+                <div className="h-px w-12 bg-accent opacity-40"/>
+              </div>
+              <h2 className="text-white mb-4" style={{fontFamily:'Orbitron', fontSize:'clamp(1.8rem, 4vw, 3rem)', fontWeight:700}}>
+                VIDEO <span style={{color:'var(--accent)'}}>HIGHLIGHT</span>
+              </h2>
+              <p className="text-gray-500 max-w-lg mx-auto text-sm leading-relaxed">
+                Dokumentasi kegiatan, uji terbang, dan demo teknologi laboratorium APTRG.
+              </p>
+            </div>
+
+            <div className="grid lg:grid-cols-3 gap-6 items-start">
+              {/* Main player — left 2 cols */}
+              <div className="lg:col-span-2">
+                <div className="relative overflow-hidden" style={{border:'1px solid rgba(0,212,255,0.2)', background:'rgba(4,8,16,0.95)'}}>
+                  <div className="hud-corner hud-tl" style={{width:'20px',height:'20px'}}/>
+                  <div className="hud-corner hud-tr" style={{width:'20px',height:'20px'}}/>
+                  <div className="hud-corner hud-bl" style={{width:'20px',height:'20px'}}/>
+                  <div className="hud-corner hud-br" style={{width:'20px',height:'20px'}}/>
+
+                  {/* Video element */}
+                  <div className="relative" style={{aspectRatio:'16/9'}}>
+                    <video ref={videoRef} className="w-full h-full object-cover"
+                      src={activeVideo.src}
+                      poster={activeVideo.thumb}
+                      onEnded={() => setPlaying(false)}
+                      onError={() => {}}
+                      style={{display:'block'}}>
+                    </video>
+
+                    {/* Custom overlay controls */}
+                    {!playing && (
+                      <div className="absolute inset-0 flex items-center justify-center cursor-pointer"
+                        style={{background:'rgba(4,8,16,0.4)'}}
+                        onClick={togglePlay}>
+                        <div className="flex flex-col items-center gap-4">
+                          <div className="w-20 h-20 rounded-full flex items-center justify-center transition-transform duration-300 hover:scale-110"
+                            style={{background:'rgba(0,212,255,0.12)', border:'2px solid rgba(0,212,255,0.7)', backdropFilter:'blur(8px)', boxShadow:'0 0 30px rgba(0,212,255,0.3)'}}>
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="var(--primary)" stroke="none" style={{marginLeft:'4px'}}>
+                              <polygon points="5 3 19 12 5 21 5 3"/>
+                            </svg>
+                          </div>
+                          <span style={{fontFamily:'Share Tech Mono', fontSize:'0.7rem', color:'rgba(0,212,255,0.7)', letterSpacing:'0.2em'}}>PLAY VIDEO</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Playing indicator */}
+                    {playing && (
+                      <div className="absolute top-3 left-3 flex items-center gap-2 cursor-pointer" onClick={togglePlay}
+                        style={{background:'rgba(4,8,16,0.7)', padding:'4px 10px', border:'1px solid rgba(0,212,255,0.2)'}}>
+                        <div className="w-1.5 h-1.5 rounded-full bg-success" style={{animation:'pulseGlow 1s infinite'}}/>
+                        <span style={{fontFamily:'Share Tech Mono', fontSize:'0.6rem', color:'var(--success)', letterSpacing:'0.15em'}}>PLAYING</span>
+                      </div>
+                    )}
+
+                    {/* Scan overlay */}
+                    <div className="absolute inset-0 pointer-events-none scanline opacity-30"/>
+                  </div>
+
+                  {/* Video info bar */}
+                  <div className="flex items-center justify-between px-4 py-3" style={{borderTop:'1px solid rgba(0,212,255,0.08)'}}>
+                    <div className="flex items-center gap-3">
+                      <span className="tag text-accent" style={{borderColor:'rgba(255,107,0,0.3)', fontSize:'0.55rem'}}>{activeVideo.tag}</span>
+                      <span className="text-white font-semibold text-sm" style={{fontFamily:'Rajdhani'}}>{activeVideo.title}</span>
+                    </div>
+                    <span className="text-xs" style={{fontFamily:'Share Tech Mono', color:'rgba(0,212,255,0.5)'}}>{activeVideo.duration}</span>
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div className="mt-3 px-1">
+                  <p className="text-gray-500 text-sm leading-relaxed">{activeVideo.desc}</p>
+                </div>
+              </div>
+
+              {/* Playlist — right col */}
+              <div className="flex flex-col gap-4">
+                <div className="text-xs mb-1 flex items-center gap-2" style={{fontFamily:'Share Tech Mono', color:'rgba(0,212,255,0.4)', letterSpacing:'0.15em'}}>
+                  <div className="h-px flex-1 bg-primary opacity-20"/>
+                  PLAYLIST
+                  <div className="h-px flex-1 bg-primary opacity-20"/>
+                </div>
+                {videos.map(v => (
+                  <VideoCard key={v.id} video={v} onPlay={handlePlay} active={activeVideo.id === v.id}/>
+                ))}
+                <p className="text-center text-xs opacity-20 mt-2" style={{fontFamily:'Share Tech Mono', letterSpacing:'0.1em'}}>
+                  assets/videos/highlight1-3.mp4
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ---- AIRCRAFT FLEET ----
+    const aircraft = [
+      {
+        id: 'AC-01',
+        name: 'Fixed Wing Alpha',
+        type: 'Fixed Wing',
+        status: 'ACTIVE',
+        statusColor: '#00ff88',
+        specs: { Wingspan: '1.8m', Payload: '500g', Endurance: '45 min', Range: '3 km' },
+        desc: 'Wahana fixed-wing utama APTRG untuk misi surveillance dan pengumpulan data telemetri jarak menengah.',
+        img: 'assets/aircraft/ac01.png',
+        obj3d: 'assets/3d_pesawat/Untitled.obj',
+        divColor: '#00d4ff',
+        divColorRgb: '0,212,255',
+      },
+      {
+        id: 'AC-02',
+        name: 'Quadrotor Bravo',
+        type: 'Multirotor',
+        status: 'ACTIVE',
+        statusColor: '#00ff88',
+        specs: { Diameter: '450mm', Payload: '800g', Endurance: '22 min', Range: '1.5 km' },
+        desc: 'Platform multirotor untuk pengujian payload dan sistem GCS di area terbatas dengan manuverabilitas tinggi.',
+        img: 'assets/aircraft/ac02.png',
+        obj3d: 'assets/3d_pesawat/ac02.obj',
+        divColor: '#ff6b00',
+        divColorRgb: '255,107,0',
+      },
+      {
+        id: 'AC-03',
+        name: 'VTOL Charlie',
+        type: 'VTOL Hybrid',
+        status: 'DEVELOPMENT',
+        statusColor: '#ff6b00',
+        specs: { Wingspan: '2.2m', Payload: '1.2kg', Endurance: '60 min', Range: '5 km' },
+        desc: 'Wahana hybrid VTOL generasi terbaru — menggabungkan kemampuan vertical takeoff dengan efisiensi fixed-wing.',
+        img: 'assets/aircraft/ac03.png',
+        obj3d: 'assets/3d_pesawat/ac03.obj',
+        divColor: '#00ff88',
+        divColorRgb: '0,255,136',
+      },
+      {
+        id: 'AC-04',
+        name: 'Glider Delta',
+        type: 'Glider',
+        status: 'STANDBY',
+        statusColor: '#a78bfa',
+        specs: { Wingspan: '2.6m', Payload: '300g', Endurance: '90 min', Range: '8 km' },
+        desc: 'Wahana glider beraspek rasio tinggi untuk misi endurance panjang dan penelitian aerodinamika.',
+        img: 'assets/aircraft/ac04.png',
+        obj3d: 'assets/3d_pesawat/ac04.obj',
+        divColor: '#a78bfa',
+        divColorRgb: '167,139,250',
+      },
+    ];
+
+    // ---- 3D VIEWER COMPONENT ----
+    function Viewer3D({ objPath, color, colorRgb, active }) {
+      const mountRef = useRef(null);
+      const stateRef = useRef({ renderer:null, scene:null, camera:null, model:null, animId:null, isDragging:false, prevMouse:{x:0,y:0}, rotX:0.2, rotY:0, autoRotate:true });
+      const [status, setStatus] = useState('loading'); // loading | ok | error
+
+      useEffect(() => {
+        if (!active || !mountRef.current) return;
+        const el = mountRef.current;
+        const s = stateRef.current;
+        const W = el.clientWidth, H = el.clientHeight;
+
+        // Scene
+        s.scene = new THREE.Scene();
+        s.scene.background = null;
+
+        // Camera
+        s.camera = new THREE.PerspectiveCamera(45, W / H, 0.01, 1000);
+        s.camera.position.set(0, 0, 3);
+
+        // Renderer
+        s.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        s.renderer.setSize(W, H);
+        s.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        s.renderer.setClearColor(0x000000, 0);
+        el.appendChild(s.renderer.domElement);
+
+        // Lights
+        const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+        s.scene.add(ambient);
+        const [r,g,b] = colorRgb.split(',').map(Number);
+        const keyLight = new THREE.DirectionalLight(new THREE.Color(r/255,g/255,b/255), 1.2);
+        keyLight.position.set(2, 3, 4);
+        s.scene.add(keyLight);
+        const fillLight = new THREE.DirectionalLight(0xaabbcc, 0.5);
+        fillLight.position.set(-3, -1, 2);
+        s.scene.add(fillLight);
+        const rimLight = new THREE.DirectionalLight(0xffffff, 0.3);
+        rimLight.position.set(0, -3, -3);
+        s.scene.add(rimLight);
+
+        // Grid helper
+        const grid = new THREE.GridHelper(4, 12, `rgb(${colorRgb})`, `rgb(${colorRgb})`);
+        grid.material.opacity = 0.08;
+        grid.material.transparent = true;
+        grid.position.y = -1;
+        s.scene.add(grid);
+
+        // Pivot group
+        const pivot = new THREE.Group();
+        s.scene.add(pivot);
+
+        // Load OBJ
+        const loader = new window.OBJLoader();
+        setStatus('loading');
+        loader.load(
+          objPath,
+          (obj) => {
+            // Auto-center + scale
+            const box = new THREE.Box3().setFromObject(obj);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const scale = 1.8 / maxDim;
+            obj.scale.setScalar(scale);
+            obj.position.sub(center.multiplyScalar(scale));
+
+            // Apply material with accent color
+            obj.traverse(child => {
+              if (child.isMesh) {
+                child.material = new THREE.MeshPhongMaterial({
+                  color: new THREE.Color(`rgb(${colorRgb})`).multiplyScalar(0.7),
+                  emissive: new THREE.Color(`rgb(${colorRgb})`).multiplyScalar(0.08),
+                  specular: new THREE.Color(0.6, 0.8, 1.0),
+                  shininess: 80,
+                  wireframe: false,
+                });
+                child.castShadow = true;
+              }
+            });
+
+            pivot.add(obj);
+            s.model = pivot;
+            setStatus('ok');
+          },
+          null,
+          () => setStatus('error')
+        );
+
+        // Animation loop
+        const animate = () => {
+          s.animId = requestAnimationFrame(animate);
+          if (s.autoRotate && !s.isDragging) s.rotY += 0.006;
+          pivot.rotation.x = s.rotX;
+          pivot.rotation.y = s.rotY;
+          s.renderer.render(s.scene, s.camera);
+        };
+        animate();
+
+        // Mouse drag orbit
+        const onDown = (e) => {
+          s.isDragging = true; s.autoRotate = false;
+          s.prevMouse = { x: e.clientX || e.touches?.[0]?.clientX, y: e.clientY || e.touches?.[0]?.clientY };
+        };
+        const onMove = (e) => {
+          if (!s.isDragging) return;
+          const cx = e.clientX || e.touches?.[0]?.clientX;
+          const cy = e.clientY || e.touches?.[0]?.clientY;
+          s.rotY += (cx - s.prevMouse.x) * 0.008;
+          s.rotX += (cy - s.prevMouse.y) * 0.006;
+          s.rotX = Math.max(-1.2, Math.min(1.2, s.rotX));
+          s.prevMouse = { x: cx, y: cy };
+        };
+        const onUp = () => { s.isDragging = false; };
+
+        el.addEventListener('mousedown', onDown);
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        el.addEventListener('touchstart', onDown, { passive: true });
+        window.addEventListener('touchmove', onMove, { passive: true });
+        window.addEventListener('touchend', onUp);
+
+        // Resize
+        const onResize = () => {
+          if (!el || !s.renderer) return;
+          const W2 = el.clientWidth, H2 = el.clientHeight;
+          s.camera.aspect = W2 / H2;
+          s.camera.updateProjectionMatrix();
+          s.renderer.setSize(W2, H2);
+        };
+        window.addEventListener('resize', onResize);
+
+        return () => {
+          cancelAnimationFrame(s.animId);
+          el.removeEventListener('mousedown', onDown);
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+          el.removeEventListener('touchstart', onDown);
+          window.removeEventListener('touchmove', onMove);
+          window.removeEventListener('touchend', onUp);
+          window.removeEventListener('resize', onResize);
+          if (s.renderer && s.renderer.domElement.parentNode === el) {
+            el.removeChild(s.renderer.domElement);
+          }
+          s.renderer && s.renderer.dispose();
+        };
+      }, [active, objPath]);
+
+      return (
+        <div className="w-full h-full relative viewer-3d" ref={mountRef}>
+          {status === 'loading' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 pointer-events-none">
+              <div className="w-8 h-8 rounded-full spin-3d" style={{border:`2px solid rgba(${colorRgb},0.15)`, borderTop:`2px solid rgb(${colorRgb})`}}/>
+              <span style={{fontFamily:'Share Tech Mono', fontSize:'0.6rem', color:`rgba(${colorRgb},0.5)`, letterSpacing:'0.2em'}}>LOADING 3D...</span>
+            </div>
+          )}
+          {status === 'error' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={`rgba(${colorRgb},0.3)`} strokeWidth="1">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+              </svg>
+              <span style={{fontFamily:'Share Tech Mono', fontSize:'0.58rem', color:`rgba(${colorRgb},0.3)`, letterSpacing:'0.1em'}}>FILE NOT FOUND</span>
+              <span style={{fontFamily:'Share Tech Mono', fontSize:'0.5rem', color:`rgba(${colorRgb},0.2)`, letterSpacing:'0.1em'}}>assets/3d_pesawat/</span>
+            </div>
+          )}
+          {status === 'ok' && (
+            <div className="absolute bottom-2 left-2 pointer-events-none flex items-center gap-1.5">
+              <div className="w-1 h-1 rounded-full bg-success" style={{boxShadow:'0 0 4px var(--success)'}}/>
+              <span style={{fontFamily:'Share Tech Mono', fontSize:'0.5rem', color:'rgba(0,255,136,0.5)', letterSpacing:'0.12em'}}>DRAG TO ROTATE</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ---- AIRCRAFT CARD with 3D toggle ----
+    function AircraftCard({ plane, index }) {
+      const [hovered, setHovered] = useState(false);
+      const [imgErr, setImgErr] = useState(false);
+      const [show3D, setShow3D] = useState(false);
+
+      return (
+        <div className="div-card fade-in"
+          style={{
+            border: `1px solid rgba(${plane.divColorRgb},${hovered ? '0.45' : '0.18'})`,
+            background: 'rgba(8,15,26,0.85)',
+            animationDelay: `${index * 0.1}s`,
+            animationFillMode: 'both',
+            transition: 'border-color 0.3s, transform 0.35s cubic-bezier(0.23,1,0.32,1)',
+          }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}>
+
+          {/* Visual area — 3D or Image */}
+          <div className="relative overflow-hidden" style={{aspectRatio:'4/3', background:'rgba(4,8,16,0.95)'}}>
+            <div className="hud-corner hud-tl" style={{width:'14px',height:'14px',borderColor:plane.divColor}}/>
+            <div className="hud-corner hud-tr" style={{width:'14px',height:'14px',borderColor:plane.divColor}}/>
+            <div className="hud-corner hud-bl" style={{width:'14px',height:'14px',borderColor:plane.divColor}}/>
+            <div className="hud-corner hud-br" style={{width:'14px',height:'14px',borderColor:plane.divColor}}/>
+            <div className="absolute inset-0 grid-bg opacity-30"/>
+
+            {/* 3D Viewer */}
+            {show3D ? (
+              <div className="absolute inset-0">
+                <Viewer3D objPath={plane.obj3d} color={plane.divColor} colorRgb={plane.divColorRgb} active={show3D}/>
+              </div>
+            ) : (
+              /* 2D image / fallback */
+              !imgErr ? (
+                <img src={plane.img} alt={plane.name}
+                  className="w-full h-full object-contain transition-all duration-700 p-4"
+                  style={{
+                    filter: hovered ? `drop-shadow(0 0 20px ${plane.divColor}) contrast(1.05)` : `drop-shadow(0 0 8px rgba(${plane.divColorRgb},0.3)) grayscale(15%)`,
+                    transform: hovered ? 'scale(1.06) translateY(-4px)' : 'scale(1)',
+                  }}
+                  onError={() => setImgErr(true)}/>
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+                  <svg width="80" height="60" viewBox="0 0 80 60" fill="none">
+                    {plane.type === 'Multirotor' ? (
+                      <>
+                        <circle cx="40" cy="30" r="8" stroke={plane.divColor} strokeWidth="1.5" opacity="0.5"/>
+                        <line x1="40" y1="22" x2="40" y2="5" stroke={plane.divColor} strokeWidth="1" opacity="0.4"/>
+                        <line x1="40" y1="38" x2="40" y2="55" stroke={plane.divColor} strokeWidth="1" opacity="0.4"/>
+                        <line x1="32" y1="30" x2="15" y2="30" stroke={plane.divColor} strokeWidth="1" opacity="0.4"/>
+                        <line x1="48" y1="30" x2="65" y2="30" stroke={plane.divColor} strokeWidth="1" opacity="0.4"/>
+                        <circle cx="40" cy="5" r="5" stroke={plane.divColor} strokeWidth="1" opacity="0.5"/>
+                        <circle cx="40" cy="55" r="5" stroke={plane.divColor} strokeWidth="1" opacity="0.5"/>
+                        <circle cx="15" cy="30" r="5" stroke={plane.divColor} strokeWidth="1" opacity="0.5"/>
+                        <circle cx="65" cy="30" r="5" stroke={plane.divColor} strokeWidth="1" opacity="0.5"/>
+                      </>
+                    ) : (
+                      <>
+                        <path d="M8 32 L40 16 L72 32" stroke={plane.divColor} strokeWidth="1.5" fill={`rgba(${plane.divColorRgb},0.05)`} opacity="0.6"/>
+                        <path d="M30 32 L40 28 L50 32 L40 36 Z" stroke={plane.divColor} strokeWidth="1" fill={`rgba(${plane.divColorRgb},0.1)`} opacity="0.7"/>
+                        <path d="M34 28 L40 16 L46 28" stroke={plane.divColor} strokeWidth="1" fill={`rgba(${plane.divColorRgb},0.08)`} opacity="0.5"/>
+                        <line x1="40" y1="32" x2="40" y2="44" stroke={plane.divColor} strokeWidth="1" opacity="0.4"/>
+                      </>
+                    )}
+                  </svg>
+                  <span style={{fontFamily:'Share Tech Mono', fontSize:'0.6rem', color:`rgba(${plane.divColorRgb},0.3)`, letterSpacing:'0.15em'}}>{plane.type.toUpperCase()}</span>
+                </div>
+              )
+            )}
+
+            {/* Toggle 3D / 2D button */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setShow3D(v => !v); }}
+              className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2.5 py-1.5 transition-all duration-200"
+              style={{
+                background: show3D ? `rgba(${plane.divColorRgb},0.25)` : 'rgba(4,8,16,0.85)',
+                border: `1px solid rgba(${plane.divColorRgb},${show3D ? '0.7' : '0.3'})`,
+                backdropFilter: 'blur(6px)',
+                cursor: 'pointer',
+                boxShadow: show3D ? `0 0 12px rgba(${plane.divColorRgb},0.4)` : 'none',
+              }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={plane.divColor} strokeWidth="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+              </svg>
+              <span style={{fontFamily:'Share Tech Mono', fontSize:'0.56rem', color:plane.divColor, letterSpacing:'0.1em'}}>
+                {show3D ? '2D' : '3D'}
+              </span>
+            </button>
+
+            {/* Status badge */}
+            <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2 py-1"
+              style={{background:'rgba(4,8,16,0.88)', border:`1px solid ${plane.statusColor}30`, backdropFilter:'blur(4px)'}}>
+              <div className="w-1.5 h-1.5 rounded-full" style={{background:plane.statusColor, boxShadow:`0 0 6px ${plane.statusColor}`, animation:'pulseGlow 2s infinite'}}/>
+              <span style={{fontFamily:'Share Tech Mono', fontSize:'0.58rem', color:plane.statusColor, letterSpacing:'0.1em'}}>{plane.status}</span>
+            </div>
+
+            {/* Aircraft ID */}
+            <div className="absolute top-3 left-3">
+              <span style={{fontFamily:'Orbitron', fontSize:'0.6rem', fontWeight:700, color:`rgba(${plane.divColorRgb},0.6)`, letterSpacing:'0.15em'}}>{plane.id}</span>
+            </div>
+
+            <div className="absolute inset-0 pointer-events-none transition-opacity duration-300"
+              style={{opacity: hovered ? 1 : 0, background:`linear-gradient(180deg, transparent 0%, rgba(${plane.divColorRgb},0.04) 100%)`}}/>
+          </div>
+
+          {/* Info */}
+          <div className="p-5">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-white font-bold mb-0.5"
+                  style={{fontFamily:'Orbitron', fontSize:'0.9rem', letterSpacing:'0.05em'}}>{plane.name}</h3>
+                <span className="text-xs" style={{fontFamily:'Share Tech Mono', color:plane.divColor, opacity:0.7}}>{plane.type}</span>
+              </div>
+            </div>
+            <p className="text-gray-500 text-xs leading-relaxed mb-4">{plane.desc}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(plane.specs).map(([key, val]) => (
+                <div key={key} className="p-2" style={{background:`rgba(${plane.divColorRgb},0.04)`, border:`1px solid rgba(${plane.divColorRgb},0.1)`}}>
+                  <div style={{fontFamily:'Share Tech Mono', fontSize:'0.55rem', color:`rgba(${plane.divColorRgb},0.5)`, letterSpacing:'0.12em'}}>{key.toUpperCase()}</div>
+                  <div style={{fontFamily:'Orbitron', fontSize:'0.72rem', fontWeight:700, color:plane.divColor}}>{val}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 h-px" style={{background:`linear-gradient(90deg, rgba(${plane.divColorRgb},0.4), transparent)`}}/>
+          </div>
+        </div>
+      );
+    }
+
+    function AircraftFleet() {
+      const [filter, setFilter] = useState('ALL');
+      const types = ['ALL', 'Fixed Wing', 'Multirotor', 'VTOL Hybrid', 'Glider'];
+      const filtered = filter === 'ALL' ? aircraft : aircraft.filter(a => a.type === filter);
+
+      return (
+        <section id="aircraft" className="py-28 relative overflow-hidden" style={{background:'var(--dark)'}}>
+          <div className="absolute inset-0 grid-bg opacity-20"/>
+          <div className="absolute top-0 left-0 right-0 h-px" style={{background:'linear-gradient(90deg, transparent, var(--accent), transparent)'}}/>
+
+          {/* Large BG text */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden select-none">
+            <span style={{fontFamily:'Orbitron', fontSize:'clamp(6rem,18vw,16rem)', fontWeight:900, color:'rgba(255,255,255,0.012)', letterSpacing:'0.05em', whiteSpace:'nowrap'}}>
+              FLEET
+            </span>
+          </div>
+
+          <div className="relative max-w-7xl mx-auto px-6">
+            {/* Header */}
+            <div className="text-center mb-14">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="h-px w-12 bg-accent opacity-40"/>
+                <span className="tag text-accent" style={{borderColor:'rgba(255,107,0,0.3)'}}>ARMADA WAHANA</span>
+                <div className="h-px w-12 bg-accent opacity-40"/>
+              </div>
+              <h2 className="text-white mb-4" style={{fontFamily:'Orbitron', fontSize:'clamp(1.8rem, 4vw, 3rem)', fontWeight:700}}>
+                PESAWAT <span style={{color:'var(--accent)'}}>APTRG</span>
+              </h2>
+              <p className="text-gray-500 max-w-lg mx-auto text-sm leading-relaxed">
+                Armada wahana udara tak berawak yang dikembangkan dan dioperasikan
+                oleh laboratorium APTRG untuk berbagai misi riset.
+              </p>
+            </div>
+
+            {/* Status summary bar */}
+            <div className="flex flex-wrap items-center justify-center gap-6 mb-10 py-4 px-6 mx-auto max-w-2xl"
+              style={{border:'1px solid rgba(255,255,255,0.05)', background:'rgba(8,15,26,0.5)'}}>
+              {[
+                { label: 'TOTAL WAHANA', val: aircraft.length, color: 'var(--primary)' },
+                { label: 'ACTIVE', val: aircraft.filter(a => a.status === 'ACTIVE').length, color: 'var(--success)' },
+                { label: 'DEVELOPMENT', val: aircraft.filter(a => a.status === 'DEVELOPMENT').length, color: 'var(--accent)' },
+                { label: 'STANDBY', val: aircraft.filter(a => a.status === 'STANDBY').length, color: '#a78bfa' },
+              ].map((s, i) => (
+                <div key={i} className="flex items-center gap-2 text-center">
+                  <div style={{fontFamily:'Orbitron', fontSize:'1.4rem', fontWeight:700, color:s.color}}>{s.val}</div>
+                  <div style={{fontFamily:'Share Tech Mono', fontSize:'0.58rem', color:'rgba(200,216,232,0.3)', letterSpacing:'0.12em'}}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Filter */}
+            <div className="flex flex-wrap justify-center gap-2 mb-10">
+              {types.map(t => (
+                <button key={t} onClick={() => setFilter(t)}
+                  className="tag transition-all duration-200 cursor-pointer"
+                  style={{
+                    color: filter === t ? 'var(--dark)' : 'rgba(200,216,232,0.4)',
+                    borderColor: filter === t ? 'var(--accent)' : 'rgba(255,255,255,0.08)',
+                    background: filter === t ? 'var(--accent)' : 'transparent',
+                    fontSize: '0.68rem', padding: '5px 14px',
+                    fontFamily: 'Share Tech Mono', letterSpacing: '0.1em',
+                  }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {/* Aircraft grid */}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {filtered.map((plane, i) => (
+                <AircraftCard key={plane.id} plane={plane} index={i}/>
+              ))}
+            </div>
+
+            <div className="text-center mt-10 flex flex-col gap-1">
+              <p className="text-xs opacity-20" style={{fontFamily:'Share Tech Mono', letterSpacing:'0.15em'}}>
+                FOTO 2D — assets/aircraft/ac01.png s/d ac04.png
+              </p>
+              <p className="text-xs opacity-20" style={{fontFamily:'Share Tech Mono', letterSpacing:'0.15em'}}>
+                MODEL 3D — assets/3d_pesawat/ac01.obj s/d ac04.obj
+              </p>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ---- APP ROOT ----
+    function App() {
+      const [activeSection, setActiveSection] = useState('home');
+      const [scrollProgress, setScrollProgress] = useState(0);
+
+      useEffect(() => {
+        const onScroll = () => {
+          const total = document.documentElement.scrollHeight - window.innerHeight;
+          setScrollProgress((window.scrollY / total) * 100);
+
+          const sections = ['home','about','divisions','team','highlight','aircraft','stats','contact'];
+          for (const s of sections.reverse()) {
+            const el = document.getElementById(s);
+            if (el && window.scrollY >= el.offsetTop - 200) {
+              setActiveSection(s);
+              break;
+            }
+          }
+        };
+        window.addEventListener('scroll', onScroll);
+        return () => window.removeEventListener('scroll', onScroll);
+      }, []);
+
+      return (
+        <div>
+          {/* Progress bar */}
+          <div className="fixed top-0 left-0 z-[100] h-0.5 progress-bar" style={{width:`${scrollProgress}%`}}/>
+          <Navbar activeSection={activeSection}/>
+          <Hero/>
+          <About/>
+          <Divisions/>
+          <Team/>
+          <VideoHighlight/>
+          <AircraftFleet/>
+          <Stats/>
+          <Ecosystem/>
+          <Contact/>
+          <Footer/>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+</body>
+</html>

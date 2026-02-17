@@ -10,6 +10,76 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // OBJLoader r128 — inline minimal implementation
+    (function(){
+      class OBJLoader {
+        constructor(manager){ this.manager = manager || THREE.DefaultLoadingManager; }
+        load(url, onLoad, onProgress, onError){
+          const loader = new THREE.FileLoader(this.manager);
+          loader.setPath(this.path||'');
+          loader.load(url, text => { try{ onLoad(this.parse(text)); }catch(e){ if(onError)onError(e); } }, onProgress, onError);
+        }
+        setPath(p){ this.path=p; return this; }
+        parse(text){
+          const obj = new THREE.Group();
+          const vertices=[], normals=[], uvs=[];
+          const geomData={ v:[], vn:[], vt:[], indices:[] };
+          const lines = text.split('\n');
+          let currentGeo = null, currentMesh = null;
+          const startNewMesh = (name) => {
+            currentGeo = new THREE.BufferGeometry();
+            const mat = new THREE.MeshPhongMaterial({color:0x8899aa, shininess:60, specular:0x223344});
+            currentMesh = new THREE.Mesh(currentGeo, mat);
+            currentMesh.name = name||'mesh';
+            obj.add(currentMesh);
+          };
+          startNewMesh('default');
+          const posArr=[], normArr=[], uvArr=[];
+          for(const raw of lines){
+            const line = raw.trim();
+            if(!line || line[0]==='#') continue;
+            const parts = line.split(/\s+/);
+            if(parts[0]==='v'){ vertices.push(parseFloat(parts[1]),parseFloat(parts[2]),parseFloat(parts[3])); }
+            else if(parts[0]==='vn'){ normals.push(parseFloat(parts[1]),parseFloat(parts[2]),parseFloat(parts[3])); }
+            else if(parts[0]==='vt'){ uvs.push(parseFloat(parts[1]),parseFloat(parts[2])); }
+            else if(parts[0]==='o'||parts[0]==='g'){
+              if(posArr.length>0){
+                currentGeo.setAttribute('position',new THREE.Float32BufferAttribute([...posArr],3));
+                if(normArr.length) currentGeo.setAttribute('normal',new THREE.Float32BufferAttribute([...normArr],3));
+                else currentGeo.computeVertexNormals();
+                posArr.length=0; normArr.length=0; uvArr.length=0;
+              }
+              startNewMesh(parts.slice(1).join(' '));
+            }
+            else if(parts[0]==='f'){
+              const faceVerts = parts.slice(1).map(p=>{
+                const s=p.split('/');
+                return { vi:(parseInt(s[0])||1)-1, vti:s[1]?(parseInt(s[1])||1)-1:-1, vni:s[2]?(parseInt(s[2])||1)-1:-1 };
+              });
+              for(let i=1;i<faceVerts.length-1;i++){
+                [faceVerts[0],faceVerts[i],faceVerts[i+1]].forEach(fv=>{
+                  const bi=fv.vi*3;
+                  posArr.push(vertices[bi],vertices[bi+1],vertices[bi+2]);
+                  if(fv.vni>=0){const ni=fv.vni*3; normArr.push(normals[ni],normals[ni+1],normals[ni+2]);}
+                });
+              }
+            }
+          }
+          if(posArr.length>0){
+            currentGeo.setAttribute('position',new THREE.Float32BufferAttribute([...posArr],3));
+            if(normArr.length) currentGeo.setAttribute('normal',new THREE.Float32BufferAttribute([...normArr],3));
+            else currentGeo.computeVertexNormals();
+          }
+          // Remove empty meshes
+          obj.children.filter(c=>!c.geometry||!c.geometry.attributes.position).forEach(c=>obj.remove(c));
+          return obj;
+        }
+      }
+      window.OBJLoader = OBJLoader;
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 
@@ -265,6 +335,19 @@
     }
 
     /* Diagonal separator */
+    /* 3D VIEWER */
+    .viewer-3d canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      touch-action: none;
+    }
+    @keyframes spin3d {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .spin-3d { animation: spin3d 1.2s linear infinite; }
+
     .diagonal-sep {
       clip-path: polygon(0 0, 100% 0, 100% 85%, 0 100%);
     }
@@ -430,7 +513,8 @@
         { href: '#about', label: 'ABOUT' },
         { href: '#divisions', label: 'DIVISI' },
         { href: '#team', label: 'TIM' },
-        { href: '#stats', label: 'STATS' },
+        { href: '#highlight', label: 'VIDEO' },
+        { href: '#aircraft', label: 'PESAWAT' },
         { href: '#contact', label: 'KONTAK' },
       ];
 
@@ -1263,6 +1347,842 @@
       );
     }
 
+    // ---- VIDEO HIGHLIGHT ----
+    const videos = [
+      { id: 'v1', title: 'APTRG Flight Test 2024', desc: 'Uji terbang wahana terbaru dengan sistem autopilot generasi baru di lapangan uji APTRG.', src: 'assets/videos/highlight1.mp4', thumb: 'assets/videos/thumb1.png', duration: '2:34', tag: 'FLIGHT TEST' },
+      { id: 'v2', title: 'GCS Live Demo', desc: 'Demonstrasi Ground Control Station real-time dengan telemetri penuh dan kendali autopilot.', src: 'assets/videos/highlight2.mp4', thumb: 'assets/videos/thumb2.png', duration: '1:47', tag: 'GCS' },
+      { id: 'v3', title: 'Payload Integration Test', desc: 'Pengujian integrasi payload dan sistem sensor pada wahana fixed-wing generasi ketiga.', src: 'assets/videos/highlight3.mp4', thumb: 'assets/videos/thumb3.png', duration: '3:12', tag: 'PAYLOAD' },
+    ];
+
+    function VideoCard({ video, onPlay, active }) {
+      return (
+        <div className="div-card group cursor-pointer fade-in"
+          style={{border: active ? '1px solid rgba(0,212,255,0.5)' : '1px solid rgba(255,255,255,0.06)', background:'rgba(8,15,26,0.8)'}}
+          onClick={() => onPlay(video)}>
+
+          {/* Thumbnail */}
+          <div className="relative overflow-hidden" style={{aspectRatio:'16/9', background:'rgba(4,8,16,0.9)'}}>
+            <div className="hud-corner hud-tl" style={{width:'12px',height:'12px'}}/>
+            <div className="hud-corner hud-tr" style={{width:'12px',height:'12px'}}/>
+            <div className="hud-corner hud-bl" style={{width:'12px',height:'12px'}}/>
+            <div className="hud-corner hud-br" style={{width:'12px',height:'12px'}}/>
+
+            <img src={video.thumb} alt={video.title}
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              style={{filter:'grayscale(20%) contrast(1.1)'}}
+              onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}/>
+            {/* Fallback thumbnail */}
+            <div className="absolute inset-0 hidden items-center justify-center flex-col gap-2"
+              style={{background:'radial-gradient(circle at center, rgba(0,212,255,0.06) 0%, transparent 70%)'}}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(0,212,255,0.3)" strokeWidth="1">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              <span style={{fontFamily:'Share Tech Mono', fontSize:'0.6rem', color:'rgba(0,212,255,0.2)', letterSpacing:'0.2em'}}>{video.id.toUpperCase()}</span>
+            </div>
+
+            {/* Play button overlay */}
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+              style={{background:'rgba(4,8,16,0.5)'}}>
+              <div className="w-14 h-14 rounded-full flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
+                style={{background:'rgba(0,212,255,0.15)', border:'2px solid rgba(0,212,255,0.6)', backdropFilter:'blur(4px)'}}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--primary)" stroke="none">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+              </div>
+            </div>
+
+            {/* Duration badge */}
+            <div className="absolute bottom-2 right-2 px-2 py-0.5 text-xs"
+              style={{background:'rgba(4,8,16,0.85)', fontFamily:'Share Tech Mono', color:'var(--primary)', border:'1px solid rgba(0,212,255,0.2)', fontSize:'0.65rem'}}>
+              {video.duration}
+            </div>
+
+            {/* Tag badge */}
+            <div className="absolute top-2 left-2">
+              <span className="tag" style={{color:'var(--accent)', borderColor:'rgba(255,107,0,0.4)', background:'rgba(4,8,16,0.85)', fontSize:'0.55rem'}}>
+                {video.tag}
+              </span>
+            </div>
+
+            {/* Active glow */}
+            {active && <div className="absolute inset-0 pointer-events-none" style={{boxShadow:'inset 0 0 30px rgba(0,212,255,0.15)'}}/>}
+          </div>
+
+          <div className="p-4">
+            <h3 className="text-white font-bold text-sm mb-1 group-hover:text-primary transition-colors" style={{fontFamily:'Rajdhani', letterSpacing:'0.03em'}}>{video.title}</h3>
+            <p className="text-gray-500 text-xs leading-relaxed">{video.desc}</p>
+            <div className="mt-3 h-px" style={{background:'linear-gradient(90deg, rgba(0,212,255,0.3), transparent)'}}/>
+          </div>
+        </div>
+      );
+    }
+
+    function VideoHighlight() {
+      const [activeVideo, setActiveVideo] = useState(videos[0]);
+      const [playing, setPlaying] = useState(false);
+      const videoRef = useRef(null);
+
+      const handlePlay = (video) => {
+        setActiveVideo(video);
+        setPlaying(false);
+        setTimeout(() => {
+          if (videoRef.current) { videoRef.current.load(); }
+        }, 50);
+      };
+
+      const togglePlay = () => {
+        if (!videoRef.current) return;
+        if (playing) { videoRef.current.pause(); setPlaying(false); }
+        else { videoRef.current.play().catch(() => {}); setPlaying(true); }
+      };
+
+      return (
+        <section id="highlight" className="py-28 relative overflow-hidden" style={{background:'var(--surface)'}}>
+          <div className="absolute inset-0 grid-bg opacity-20"/>
+          <div className="absolute top-0 left-0 right-0 h-px" style={{background:'linear-gradient(90deg, transparent, var(--primary), transparent)'}}/>
+
+          <div className="relative max-w-7xl mx-auto px-6">
+            {/* Header */}
+            <div className="text-center mb-14">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="h-px w-12 bg-accent opacity-40"/>
+                <span className="tag text-accent" style={{borderColor:'rgba(255,107,0,0.3)'}}>DOKUMENTASI</span>
+                <div className="h-px w-12 bg-accent opacity-40"/>
+              </div>
+              <h2 className="text-white mb-4" style={{fontFamily:'Orbitron', fontSize:'clamp(1.8rem, 4vw, 3rem)', fontWeight:700}}>
+                VIDEO <span style={{color:'var(--accent)'}}>HIGHLIGHT</span>
+              </h2>
+              <p className="text-gray-500 max-w-lg mx-auto text-sm leading-relaxed">
+                Dokumentasi kegiatan, uji terbang, dan demo teknologi laboratorium APTRG.
+              </p>
+            </div>
+
+            <div className="grid lg:grid-cols-3 gap-6 items-start">
+              {/* Main player — left 2 cols */}
+              <div className="lg:col-span-2">
+                <div className="relative overflow-hidden" style={{border:'1px solid rgba(0,212,255,0.2)', background:'rgba(4,8,16,0.95)'}}>
+                  <div className="hud-corner hud-tl" style={{width:'20px',height:'20px'}}/>
+                  <div className="hud-corner hud-tr" style={{width:'20px',height:'20px'}}/>
+                  <div className="hud-corner hud-bl" style={{width:'20px',height:'20px'}}/>
+                  <div className="hud-corner hud-br" style={{width:'20px',height:'20px'}}/>
+
+                  {/* Video element */}
+                  <div className="relative" style={{aspectRatio:'16/9'}}>
+                    <video ref={videoRef} className="w-full h-full object-cover"
+                      src={activeVideo.src}
+                      poster={activeVideo.thumb}
+                      onEnded={() => setPlaying(false)}
+                      onError={() => {}}
+                      style={{display:'block'}}>
+                    </video>
+
+                    {/* Custom overlay controls */}
+                    {!playing && (
+                      <div className="absolute inset-0 flex items-center justify-center cursor-pointer"
+                        style={{background:'rgba(4,8,16,0.4)'}}
+                        onClick={togglePlay}>
+                        <div className="flex flex-col items-center gap-4">
+                          <div className="w-20 h-20 rounded-full flex items-center justify-center transition-transform duration-300 hover:scale-110"
+                            style={{background:'rgba(0,212,255,0.12)', border:'2px solid rgba(0,212,255,0.7)', backdropFilter:'blur(8px)', boxShadow:'0 0 30px rgba(0,212,255,0.3)'}}>
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="var(--primary)" stroke="none" style={{marginLeft:'4px'}}>
+                              <polygon points="5 3 19 12 5 21 5 3"/>
+                            </svg>
+                          </div>
+                          <span style={{fontFamily:'Share Tech Mono', fontSize:'0.7rem', color:'rgba(0,212,255,0.7)', letterSpacing:'0.2em'}}>PLAY VIDEO</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Playing indicator */}
+                    {playing && (
+                      <div className="absolute top-3 left-3 flex items-center gap-2 cursor-pointer" onClick={togglePlay}
+                        style={{background:'rgba(4,8,16,0.7)', padding:'4px 10px', border:'1px solid rgba(0,212,255,0.2)'}}>
+                        <div className="w-1.5 h-1.5 rounded-full bg-success" style={{animation:'pulseGlow 1s infinite'}}/>
+                        <span style={{fontFamily:'Share Tech Mono', fontSize:'0.6rem', color:'var(--success)', letterSpacing:'0.15em'}}>PLAYING</span>
+                      </div>
+                    )}
+
+                    {/* Scan overlay */}
+                    <div className="absolute inset-0 pointer-events-none scanline opacity-30"/>
+                  </div>
+
+                  {/* Video info bar */}
+                  <div className="flex items-center justify-between px-4 py-3" style={{borderTop:'1px solid rgba(0,212,255,0.08)'}}>
+                    <div className="flex items-center gap-3">
+                      <span className="tag text-accent" style={{borderColor:'rgba(255,107,0,0.3)', fontSize:'0.55rem'}}>{activeVideo.tag}</span>
+                      <span className="text-white font-semibold text-sm" style={{fontFamily:'Rajdhani'}}>{activeVideo.title}</span>
+                    </div>
+                    <span className="text-xs" style={{fontFamily:'Share Tech Mono', color:'rgba(0,212,255,0.5)'}}>{activeVideo.duration}</span>
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div className="mt-3 px-1">
+                  <p className="text-gray-500 text-sm leading-relaxed">{activeVideo.desc}</p>
+                </div>
+              </div>
+
+              {/* Playlist — right col */}
+              <div className="flex flex-col gap-4">
+                <div className="text-xs mb-1 flex items-center gap-2" style={{fontFamily:'Share Tech Mono', color:'rgba(0,212,255,0.4)', letterSpacing:'0.15em'}}>
+                  <div className="h-px flex-1 bg-primary opacity-20"/>
+                  PLAYLIST
+                  <div className="h-px flex-1 bg-primary opacity-20"/>
+                </div>
+                {videos.map(v => (
+                  <VideoCard key={v.id} video={v} onPlay={handlePlay} active={activeVideo.id === v.id}/>
+                ))}
+                <p className="text-center text-xs opacity-20 mt-2" style={{fontFamily:'Share Tech Mono', letterSpacing:'0.1em'}}>
+                  assets/videos/highlight1-3.mp4
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ---- AIRCRAFT FLEET ----
+    const aircraft = [
+      {
+        id: 'AC-01',
+        name: 'Fixed Wing Alpha',
+        type: 'Fixed Wing',
+        status: 'ACTIVE',
+        statusColor: '#00ff88',
+        specs: { Wingspan: '1.8m', Payload: '500g', Endurance: '45 min', Range: '3 km' },
+        desc: 'Wahana fixed-wing utama APTRG untuk misi surveillance dan pengumpulan data telemetri jarak menengah.',
+        img: 'assets/aircraft/ac01.png',
+        obj3d: 'assets/3d_pesawat/Untitled (1).obj',
+        divColor: '#00d4ff',
+        divColorRgb: '0,212,255',
+      },
+      {
+        id: 'AC-02',
+        name: 'Quadrotor Bravo',
+        type: 'Multirotor',
+        status: 'ACTIVE',
+        statusColor: '#00ff88',
+        specs: { Diameter: '450mm', Payload: '800g', Endurance: '22 min', Range: '1.5 km' },
+        desc: 'Platform multirotor untuk pengujian payload dan sistem GCS di area terbatas dengan manuverabilitas tinggi.',
+        img: 'assets/aircraft/ac02.png',
+        obj3d: 'assets/3d_pesawat/ac02.obj',
+        divColor: '#ff6b00',
+        divColorRgb: '255,107,0',
+      },
+      {
+        id: 'AC-03',
+        name: 'VTOL Charlie',
+        type: 'VTOL Hybrid',
+        status: 'DEVELOPMENT',
+        statusColor: '#ff6b00',
+        specs: { Wingspan: '2.2m', Payload: '1.2kg', Endurance: '60 min', Range: '5 km' },
+        desc: 'Wahana hybrid VTOL generasi terbaru — menggabungkan kemampuan vertical takeoff dengan efisiensi fixed-wing.',
+        img: 'assets/aircraft/ac03.png',
+        obj3d: 'assets/3d_pesawat/ac03.obj',
+        divColor: '#00ff88',
+        divColorRgb: '0,255,136',
+      },
+      {
+        id: 'AC-04',
+        name: 'Glider Delta',
+        type: 'Glider',
+        status: 'STANDBY',
+        statusColor: '#a78bfa',
+        specs: { Wingspan: '2.6m', Payload: '300g', Endurance: '90 min', Range: '8 km' },
+        desc: 'Wahana glider beraspek rasio tinggi untuk misi endurance panjang dan penelitian aerodinamika.',
+        img: 'assets/aircraft/ac04.png',
+        obj3d: 'assets/3d_pesawat/ac04.obj',
+        divColor: '#a78bfa',
+        divColorRgb: '167,139,250',
+      },
+    ];
+
+    // ---- MODAL 3D VIEWER ----
+    function Modal3DViewer({ plane, onClose }) {
+      const mountRef = useRef(null);
+      const stateRef = useRef({
+        renderer:null, scene:null, camera:null, animId:null,
+        isDragging:false, prevMouse:{x:0,y:0},
+        rotX:0.15, rotY:0.4, autoRotate:true,
+        zoom:3, pivot:null, wireframe:false,
+      });
+      const [status, setStatus] = useState('loading');
+      const [wireframe, setWireframe] = useState(false);
+      const [autoRotate, setAutoRotate] = useState(true);
+
+      // Close on ESC
+      useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        document.body.style.overflow = 'hidden';
+        return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
+      }, []);
+
+      useEffect(() => {
+        if (!mountRef.current) return;
+        const el = mountRef.current;
+        const s = stateRef.current;
+        const W = el.clientWidth, H = el.clientHeight;
+
+        // Scene
+        s.scene = new THREE.Scene();
+        s.scene.background = new THREE.Color(0x040810);
+        s.scene.fog = new THREE.Fog(0x040810, 8, 20);
+
+        // Camera
+        s.camera = new THREE.PerspectiveCamera(45, W / H, 0.01, 100);
+        s.camera.position.set(0, 0.5, s.zoom);
+
+        // Renderer
+        s.renderer = new THREE.WebGLRenderer({ antialias: true });
+        s.renderer.setSize(W, H);
+        s.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        s.renderer.shadowMap.enabled = true;
+        el.appendChild(s.renderer.domElement);
+
+        // Lights
+        const ambient = new THREE.AmbientLight(0xffffff, 0.35);
+        s.scene.add(ambient);
+        const [r,g,b] = plane.divColorRgb.split(',').map(Number);
+        const key = new THREE.DirectionalLight(new THREE.Color(r/255,g/255,b/255), 1.4);
+        key.position.set(3, 5, 5); key.castShadow = true;
+        s.scene.add(key);
+        const fill = new THREE.DirectionalLight(0x8899cc, 0.6);
+        fill.position.set(-4, 2, -3);
+        s.scene.add(fill);
+        const rim = new THREE.DirectionalLight(0xffffff, 0.4);
+        rim.position.set(0, -4, -4);
+        s.scene.add(rim);
+        // Colored underlight
+        const under = new THREE.PointLight(new THREE.Color(r/255,g/255,b/255), 0.5, 8);
+        under.position.set(0, -2, 0);
+        s.scene.add(under);
+
+        // Grid
+        const grid = new THREE.GridHelper(10, 20, `rgb(${plane.divColorRgb})`, `rgb(${plane.divColorRgb})`);
+        grid.material.opacity = 0.06;
+        grid.material.transparent = true;
+        grid.position.y = -1.2;
+        s.scene.add(grid);
+
+        // Pivot
+        const pivot = new THREE.Group();
+        s.scene.add(pivot);
+        s.pivot = pivot;
+
+        // Load OBJ
+        setStatus('loading');
+        const loader = new window.OBJLoader();
+        loader.load(
+          plane.obj3d,
+          (obj) => {
+            const box = new THREE.Box3().setFromObject(obj);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const scale = 2.2 / maxDim;
+            obj.scale.setScalar(scale);
+            obj.position.sub(center.multiplyScalar(scale));
+            obj.traverse(child => {
+              if (child.isMesh) {
+                child.material = new THREE.MeshPhongMaterial({
+                  color: new THREE.Color(`rgb(${plane.divColorRgb})`).multiplyScalar(0.65),
+                  emissive: new THREE.Color(`rgb(${plane.divColorRgb})`).multiplyScalar(0.06),
+                  specular: new THREE.Color(0.5, 0.7, 0.9),
+                  shininess: 90,
+                  wireframe: false,
+                });
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
+            });
+            pivot.add(obj);
+            setStatus('ok');
+          },
+          null,
+          () => setStatus('error')
+        );
+
+        // Animate
+        const animate = () => {
+          s.animId = requestAnimationFrame(animate);
+          if (s.autoRotate && !s.isDragging) s.rotY += 0.005;
+          pivot.rotation.x = s.rotX;
+          pivot.rotation.y = s.rotY;
+          s.camera.position.z = s.zoom;
+          s.renderer.render(s.scene, s.camera);
+        };
+        animate();
+
+        // Mouse drag
+        const onDown = (e) => {
+          s.isDragging = true; s.autoRotate = false; setAutoRotate(false);
+          s.prevMouse = { x: e.clientX ?? e.touches?.[0]?.clientX, y: e.clientY ?? e.touches?.[0]?.clientY };
+        };
+        const onMove = (e) => {
+          if (!s.isDragging) return;
+          const cx = e.clientX ?? e.touches?.[0]?.clientX;
+          const cy = e.clientY ?? e.touches?.[0]?.clientY;
+          s.rotY += (cx - s.prevMouse.x) * 0.007;
+          s.rotX += (cy - s.prevMouse.y) * 0.005;
+          s.rotX = Math.max(-1.4, Math.min(1.4, s.rotX));
+          s.prevMouse = { x: cx, y: cy };
+        };
+        const onUp = () => { s.isDragging = false; };
+
+        // Scroll zoom
+        const onWheel = (e) => {
+          e.preventDefault();
+          s.zoom = Math.max(1, Math.min(8, s.zoom + e.deltaY * 0.005));
+        };
+
+        el.addEventListener('mousedown', onDown);
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        el.addEventListener('touchstart', onDown, { passive:true });
+        window.addEventListener('touchmove', onMove, { passive:true });
+        window.addEventListener('touchend', onUp);
+        el.addEventListener('wheel', onWheel, { passive:false });
+
+        // Resize
+        const onResize = () => {
+          if (!el || !s.renderer) return;
+          s.renderer.setSize(el.clientWidth, el.clientHeight);
+          s.camera.aspect = el.clientWidth / el.clientHeight;
+          s.camera.updateProjectionMatrix();
+        };
+        window.addEventListener('resize', onResize);
+
+        return () => {
+          cancelAnimationFrame(s.animId);
+          el.removeEventListener('mousedown', onDown);
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+          el.removeEventListener('touchstart', onDown);
+          window.removeEventListener('touchmove', onMove);
+          window.removeEventListener('touchend', onUp);
+          el.removeEventListener('wheel', onWheel);
+          window.removeEventListener('resize', onResize);
+          if (s.renderer?.domElement?.parentNode === el) el.removeChild(s.renderer.domElement);
+          s.renderer?.dispose();
+        };
+      }, []);
+
+      // Wireframe toggle
+      const toggleWireframe = () => {
+        const s = stateRef.current;
+        const next = !wireframe;
+        setWireframe(next);
+        s.pivot?.traverse(child => {
+          if (child.isMesh) child.material.wireframe = next;
+        });
+      };
+
+      // Reset rotation
+      const resetRotation = () => {
+        const s = stateRef.current;
+        s.rotX = 0.15; s.rotY = 0.4;
+        s.zoom = 3;
+        s.autoRotate = true; setAutoRotate(true);
+      };
+
+      // Toggle auto rotate
+      const toggleAutoRotate = () => {
+        stateRef.current.autoRotate = !autoRotate;
+        setAutoRotate(v => !v);
+      };
+
+      return (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center"
+          style={{background:'rgba(2,5,8,0.92)', backdropFilter:'blur(12px)'}}
+          onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+
+          {/* Modal container */}
+          <div className="relative flex flex-col md:flex-row w-full max-w-6xl mx-4 overflow-hidden"
+            style={{
+              border:`1px solid rgba(${plane.divColorRgb},0.35)`,
+              background:'rgba(4,8,16,0.98)',
+              boxShadow:`0 0 80px rgba(${plane.divColorRgb},0.15), 0 0 200px rgba(${plane.divColorRgb},0.05)`,
+              maxHeight:'90vh',
+              animation:'slideIn 0.3s ease forwards',
+            }}>
+
+            {/* HUD corners */}
+            <div className="hud-corner hud-tl" style={{width:'24px',height:'24px',borderColor:plane.divColor,zIndex:10}}/>
+            <div className="hud-corner hud-tr" style={{width:'24px',height:'24px',borderColor:plane.divColor,zIndex:10}}/>
+            <div className="hud-corner hud-bl" style={{width:'24px',height:'24px',borderColor:plane.divColor,zIndex:10}}/>
+            <div className="hud-corner hud-br" style={{width:'24px',height:'24px',borderColor:plane.divColor,zIndex:10}}/>
+
+            {/* === 3D CANVAS AREA === */}
+            <div className="relative flex-1" style={{minHeight:'340px', height:'70vh'}}>
+              {/* Canvas mount */}
+              <div ref={mountRef} className="w-full h-full viewer-3d" style={{cursor:'grab'}}/>
+
+              {/* Loading overlay */}
+              {status === 'loading' && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none"
+                  style={{background:'rgba(4,8,16,0.7)'}}>
+                  <div className="w-12 h-12 rounded-full spin-3d"
+                    style={{border:`2px solid rgba(${plane.divColorRgb},0.12)`, borderTop:`2px solid rgb(${plane.divColorRgb})`}}/>
+                  <div style={{fontFamily:'Share Tech Mono', fontSize:'0.7rem', color:`rgba(${plane.divColorRgb},0.6)`, letterSpacing:'0.25em'}}>
+                    LOADING MODEL...
+                  </div>
+                  <div style={{fontFamily:'Share Tech Mono', fontSize:'0.55rem', color:'rgba(200,216,232,0.2)', letterSpacing:'0.1em'}}>
+                    {plane.obj3d}
+                  </div>
+                </div>
+              )}
+
+              {/* Error overlay */}
+              {status === 'error' && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 pointer-events-none"
+                  style={{background:'rgba(4,8,16,0.85)'}}>
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={`rgba(${plane.divColorRgb},0.35)`} strokeWidth="1">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                  </svg>
+                  <div style={{fontFamily:'Share Tech Mono', fontSize:'0.7rem', color:`rgba(${plane.divColorRgb},0.4)`, letterSpacing:'0.15em'}}>FILE NOT FOUND</div>
+                  <div style={{fontFamily:'Share Tech Mono', fontSize:'0.56rem', color:'rgba(200,216,232,0.2)', letterSpacing:'0.1em'}}>{plane.obj3d}</div>
+                  <div style={{fontFamily:'Share Tech Mono', fontSize:'0.5rem', color:'rgba(200,216,232,0.15)', letterSpacing:'0.08em'}}>
+                    Pastikan menggunakan web server (Live Server / localhost)
+                  </div>
+                </div>
+              )}
+
+              {/* Top bar — ID + controls */}
+              <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3"
+                style={{background:'linear-gradient(to bottom, rgba(4,8,16,0.9), transparent)'}}>
+                <div className="flex items-center gap-3">
+                  <span style={{fontFamily:'Orbitron', fontSize:'0.7rem', fontWeight:700, color:plane.divColor, letterSpacing:'0.18em'}}>{plane.id}</span>
+                  <span className="tag" style={{color:plane.statusColor, borderColor:`${plane.statusColor}40`, fontSize:'0.55rem', background:'rgba(4,8,16,0.7)'}}>
+                    {plane.status}
+                  </span>
+                </div>
+                {/* 3D controls */}
+                <div className="flex items-center gap-2">
+                  {/* Wireframe */}
+                  <button onClick={toggleWireframe}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 transition-all duration-200"
+                    style={{
+                      background: wireframe ? `rgba(${plane.divColorRgb},0.2)` : 'rgba(4,8,16,0.7)',
+                      border: `1px solid rgba(${plane.divColorRgb},${wireframe?'0.6':'0.25'})`,
+                      cursor:'pointer',
+                    }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={plane.divColor} strokeWidth="2">
+                      <polygon points="2 12 12 2 22 12 12 22 2 12"/>
+                    </svg>
+                    <span style={{fontFamily:'Share Tech Mono', fontSize:'0.55rem', color:plane.divColor}}>WIRE</span>
+                  </button>
+                  {/* Auto rotate */}
+                  <button onClick={toggleAutoRotate}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 transition-all duration-200"
+                    style={{
+                      background: autoRotate ? `rgba(${plane.divColorRgb},0.2)` : 'rgba(4,8,16,0.7)',
+                      border: `1px solid rgba(${plane.divColorRgb},${autoRotate?'0.6':'0.25'})`,
+                      cursor:'pointer',
+                    }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={plane.divColor} strokeWidth="2">
+                      <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                    <span style={{fontFamily:'Share Tech Mono', fontSize:'0.55rem', color:plane.divColor}}>AUTO</span>
+                  </button>
+                  {/* Reset */}
+                  <button onClick={resetRotation}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 transition-all duration-200"
+                    style={{background:'rgba(4,8,16,0.7)', border:`1px solid rgba(${plane.divColorRgb},0.25)`, cursor:'pointer'}}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={plane.divColor} strokeWidth="2">
+                      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                      <path d="M3 3v5h5"/>
+                    </svg>
+                    <span style={{fontFamily:'Share Tech Mono', fontSize:'0.55rem', color:plane.divColor}}>RESET</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Bottom hint */}
+              {status === 'ok' && (
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-3 pointer-events-none">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-1 h-1 rounded-full bg-success" style={{boxShadow:'0 0 4px var(--success)'}}/>
+                    <span style={{fontFamily:'Share Tech Mono', fontSize:'0.5rem', color:'rgba(0,255,136,0.45)', letterSpacing:'0.12em'}}>DRAG ROTATE</span>
+                  </div>
+                  <span style={{fontFamily:'Share Tech Mono', fontSize:'0.5rem', color:'rgba(200,216,232,0.2)', letterSpacing:'0.1em'}}>·</span>
+                  <span style={{fontFamily:'Share Tech Mono', fontSize:'0.5rem', color:'rgba(200,216,232,0.25)', letterSpacing:'0.12em'}}>SCROLL ZOOM</span>
+                </div>
+              )}
+            </div>
+
+            {/* === SIDEBAR INFO === */}
+            <div className="flex flex-col w-full md:w-72 overflow-y-auto"
+              style={{borderLeft:`1px solid rgba(${plane.divColorRgb},0.12)`, background:'rgba(2,5,8,0.6)'}}>
+
+              {/* Close button */}
+              <div className="flex items-center justify-between px-5 py-4"
+                style={{borderBottom:`1px solid rgba(${plane.divColorRgb},0.1)`}}>
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full" style={{background:plane.divColor, boxShadow:`0 0 8px ${plane.divColor}`}}/>
+                  <span style={{fontFamily:'Share Tech Mono', fontSize:'0.6rem', color:plane.divColor, letterSpacing:'0.15em'}}>3D VIEWER</span>
+                </div>
+                <button onClick={onClose}
+                  style={{background:'none', border:'none', cursor:'pointer', color:'rgba(200,216,232,0.4)', lineHeight:1}}
+                  className="hover:text-white transition-colors">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+
+              {/* Aircraft name */}
+              <div className="px-5 py-5" style={{borderBottom:`1px solid rgba(${plane.divColorRgb},0.08)`}}>
+                <div style={{fontFamily:'Share Tech Mono', fontSize:'0.58rem', color:`rgba(${plane.divColorRgb},0.5)`, letterSpacing:'0.2em', marginBottom:'6px'}}>{plane.id} — {plane.type.toUpperCase()}</div>
+                <h3 style={{fontFamily:'Orbitron', fontSize:'1.1rem', fontWeight:700, color:'white', letterSpacing:'0.04em', lineHeight:1.2}}>{plane.name}</h3>
+                <div className="mt-1" style={{fontFamily:'Share Tech Mono', fontSize:'0.56rem', color:`rgba(${plane.divColorRgb},0.6)`, letterSpacing:'0.1em'}}>
+                  {plane.obj3d.split('/').pop()}
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="px-5 py-4" style={{borderBottom:`1px solid rgba(${plane.divColorRgb},0.08)`}}>
+                <p style={{color:'rgba(200,216,232,0.45)', fontSize:'0.78rem', lineHeight:1.7, fontFamily:'Rajdhani'}}>{plane.desc}</p>
+              </div>
+
+              {/* Specs */}
+              <div className="px-5 py-4" style={{borderBottom:`1px solid rgba(${plane.divColorRgb},0.08)`}}>
+                <div style={{fontFamily:'Share Tech Mono', fontSize:'0.56rem', color:`rgba(${plane.divColorRgb},0.4)`, letterSpacing:'0.18em', marginBottom:'12px'}}>SPECIFICATIONS</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(plane.specs).map(([key, val]) => (
+                    <div key={key} className="p-2.5" style={{background:`rgba(${plane.divColorRgb},0.04)`, border:`1px solid rgba(${plane.divColorRgb},0.1)`}}>
+                      <div style={{fontFamily:'Share Tech Mono', fontSize:'0.5rem', color:`rgba(${plane.divColorRgb},0.45)`, letterSpacing:'0.12em', marginBottom:'3px'}}>{key.toUpperCase()}</div>
+                      <div style={{fontFamily:'Orbitron', fontSize:'0.78rem', fontWeight:700, color:plane.divColor}}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 3D file info */}
+              <div className="px-5 py-4 mt-auto">
+                <div style={{fontFamily:'Share Tech Mono', fontSize:'0.56rem', color:'rgba(200,216,232,0.15)', letterSpacing:'0.12em', marginBottom:'6px'}}>3D MODEL PATH</div>
+                <div style={{fontFamily:'Share Tech Mono', fontSize:'0.52rem', color:`rgba(${plane.divColorRgb},0.3)`, letterSpacing:'0.08em', wordBreak:'break-all'}}>{plane.obj3d}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ---- AIRCRAFT CARD with 3D modal trigger ----
+    function AircraftCard({ plane, index }) {
+      const [hovered, setHovered] = useState(false);
+      const [imgErr, setImgErr] = useState(false);
+      const [showModal, setShowModal] = useState(false);
+
+      return (
+        <>
+          {showModal && <Modal3DViewer plane={plane} onClose={() => setShowModal(false)}/>}
+
+          <div className="div-card fade-in"
+            style={{
+              border: `1px solid rgba(${plane.divColorRgb},${hovered ? '0.45' : '0.18'})`,
+              background: 'rgba(8,15,26,0.85)',
+              animationDelay: `${index * 0.1}s`,
+              animationFillMode: 'both',
+              transition: 'border-color 0.3s, transform 0.35s cubic-bezier(0.23,1,0.32,1)',
+            }}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}>
+
+            {/* Visual area */}
+            <div className="relative overflow-hidden" style={{aspectRatio:'4/3', background:'rgba(4,8,16,0.95)'}}>
+              <div className="hud-corner hud-tl" style={{width:'14px',height:'14px',borderColor:plane.divColor}}/>
+              <div className="hud-corner hud-tr" style={{width:'14px',height:'14px',borderColor:plane.divColor}}/>
+              <div className="hud-corner hud-bl" style={{width:'14px',height:'14px',borderColor:plane.divColor}}/>
+              <div className="hud-corner hud-br" style={{width:'14px',height:'14px',borderColor:plane.divColor}}/>
+              <div className="absolute inset-0 grid-bg opacity-30"/>
+
+              {!imgErr ? (
+                <img src={plane.img} alt={plane.name}
+                  className="w-full h-full object-contain transition-all duration-700 p-4"
+                  style={{
+                    filter: hovered ? `drop-shadow(0 0 20px ${plane.divColor}) contrast(1.05)` : `drop-shadow(0 0 8px rgba(${plane.divColorRgb},0.3)) grayscale(15%)`,
+                    transform: hovered ? 'scale(1.06) translateY(-4px)' : 'scale(1)',
+                  }}
+                  onError={() => setImgErr(true)}/>
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+                  <svg width="80" height="60" viewBox="0 0 80 60" fill="none">
+                    {plane.type === 'Multirotor' ? (
+                      <>
+                        <circle cx="40" cy="30" r="8" stroke={plane.divColor} strokeWidth="1.5" opacity="0.5"/>
+                        <line x1="40" y1="22" x2="40" y2="5" stroke={plane.divColor} strokeWidth="1" opacity="0.4"/>
+                        <line x1="40" y1="38" x2="40" y2="55" stroke={plane.divColor} strokeWidth="1" opacity="0.4"/>
+                        <line x1="32" y1="30" x2="15" y2="30" stroke={plane.divColor} strokeWidth="1" opacity="0.4"/>
+                        <line x1="48" y1="30" x2="65" y2="30" stroke={plane.divColor} strokeWidth="1" opacity="0.4"/>
+                        <circle cx="40" cy="5" r="5" stroke={plane.divColor} strokeWidth="1" opacity="0.5"/>
+                        <circle cx="40" cy="55" r="5" stroke={plane.divColor} strokeWidth="1" opacity="0.5"/>
+                        <circle cx="15" cy="30" r="5" stroke={plane.divColor} strokeWidth="1" opacity="0.5"/>
+                        <circle cx="65" cy="30" r="5" stroke={plane.divColor} strokeWidth="1" opacity="0.5"/>
+                      </>
+                    ) : (
+                      <>
+                        <path d="M8 32 L40 16 L72 32" stroke={plane.divColor} strokeWidth="1.5" fill={`rgba(${plane.divColorRgb},0.05)`} opacity="0.6"/>
+                        <path d="M30 32 L40 28 L50 32 L40 36 Z" stroke={plane.divColor} strokeWidth="1" fill={`rgba(${plane.divColorRgb},0.1)`} opacity="0.7"/>
+                        <path d="M34 28 L40 16 L46 28" stroke={plane.divColor} strokeWidth="1" fill={`rgba(${plane.divColorRgb},0.08)`} opacity="0.5"/>
+                        <line x1="40" y1="32" x2="40" y2="44" stroke={plane.divColor} strokeWidth="1" opacity="0.4"/>
+                      </>
+                    )}
+                  </svg>
+                  <span style={{fontFamily:'Share Tech Mono', fontSize:'0.6rem', color:`rgba(${plane.divColorRgb},0.3)`, letterSpacing:'0.15em'}}>{plane.type.toUpperCase()}</span>
+                </div>
+              )}
+
+              {/* 3D POPUP button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowModal(true); }}
+                className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-2 transition-all duration-300 group"
+                style={{
+                  background: `rgba(${plane.divColorRgb},0.12)`,
+                  border: `1px solid rgba(${plane.divColorRgb},0.4)`,
+                  backdropFilter: 'blur(8px)',
+                  cursor: 'pointer',
+                  boxShadow: hovered ? `0 0 16px rgba(${plane.divColorRgb},0.35)` : 'none',
+                  transition: 'all 0.25s',
+                }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={plane.divColor} strokeWidth="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                </svg>
+                <span style={{fontFamily:'Share Tech Mono', fontSize:'0.6rem', color:plane.divColor, letterSpacing:'0.12em', fontWeight:600}}>
+                  VIEW 3D
+                </span>
+              </button>
+
+              {/* Status badge */}
+              <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2 py-1"
+                style={{background:'rgba(4,8,16,0.88)', border:`1px solid ${plane.statusColor}30`, backdropFilter:'blur(4px)'}}>
+                <div className="w-1.5 h-1.5 rounded-full" style={{background:plane.statusColor, boxShadow:`0 0 6px ${plane.statusColor}`, animation:'pulseGlow 2s infinite'}}/>
+                <span style={{fontFamily:'Share Tech Mono', fontSize:'0.58rem', color:plane.statusColor, letterSpacing:'0.1em'}}>{plane.status}</span>
+              </div>
+
+              {/* Aircraft ID */}
+              <div className="absolute top-3 left-3">
+                <span style={{fontFamily:'Orbitron', fontSize:'0.6rem', fontWeight:700, color:`rgba(${plane.divColorRgb},0.6)`, letterSpacing:'0.15em'}}>{plane.id}</span>
+              </div>
+
+              <div className="absolute inset-0 pointer-events-none transition-opacity duration-300"
+                style={{opacity: hovered ? 1 : 0, background:`linear-gradient(180deg, transparent 0%, rgba(${plane.divColorRgb},0.04) 100%)`}}/>
+            </div>
+
+            {/* Info */}
+            <div className="p-5">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="text-white font-bold mb-0.5"
+                    style={{fontFamily:'Orbitron', fontSize:'0.9rem', letterSpacing:'0.05em'}}>{plane.name}</h3>
+                  <span className="text-xs" style={{fontFamily:'Share Tech Mono', color:plane.divColor, opacity:0.7}}>{plane.type}</span>
+                </div>
+              </div>
+              <p className="text-gray-500 text-xs leading-relaxed mb-4">{plane.desc}</p>
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(plane.specs).map(([key, val]) => (
+                  <div key={key} className="p-2" style={{background:`rgba(${plane.divColorRgb},0.04)`, border:`1px solid rgba(${plane.divColorRgb},0.1)`}}>
+                    <div style={{fontFamily:'Share Tech Mono', fontSize:'0.55rem', color:`rgba(${plane.divColorRgb},0.5)`, letterSpacing:'0.12em'}}>{key.toUpperCase()}</div>
+                    <div style={{fontFamily:'Orbitron', fontSize:'0.72rem', fontWeight:700, color:plane.divColor}}>{val}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 h-px" style={{background:`linear-gradient(90deg, rgba(${plane.divColorRgb},0.4), transparent)`}}/>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    function AircraftFleet() {
+      const [filter, setFilter] = useState('ALL');
+      const types = ['ALL', 'Fixed Wing', 'Multirotor', 'VTOL Hybrid', 'Glider'];
+      const filtered = filter === 'ALL' ? aircraft : aircraft.filter(a => a.type === filter);
+
+      return (
+        <section id="aircraft" className="py-28 relative overflow-hidden" style={{background:'var(--dark)'}}>
+          <div className="absolute inset-0 grid-bg opacity-20"/>
+          <div className="absolute top-0 left-0 right-0 h-px" style={{background:'linear-gradient(90deg, transparent, var(--accent), transparent)'}}/>
+
+          {/* Large BG text */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden select-none">
+            <span style={{fontFamily:'Orbitron', fontSize:'clamp(6rem,18vw,16rem)', fontWeight:900, color:'rgba(255,255,255,0.012)', letterSpacing:'0.05em', whiteSpace:'nowrap'}}>
+              FLEET
+            </span>
+          </div>
+
+          <div className="relative max-w-7xl mx-auto px-6">
+            {/* Header */}
+            <div className="text-center mb-14">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="h-px w-12 bg-accent opacity-40"/>
+                <span className="tag text-accent" style={{borderColor:'rgba(255,107,0,0.3)'}}>ARMADA WAHANA</span>
+                <div className="h-px w-12 bg-accent opacity-40"/>
+              </div>
+              <h2 className="text-white mb-4" style={{fontFamily:'Orbitron', fontSize:'clamp(1.8rem, 4vw, 3rem)', fontWeight:700}}>
+                PESAWAT <span style={{color:'var(--accent)'}}>APTRG</span>
+              </h2>
+              <p className="text-gray-500 max-w-lg mx-auto text-sm leading-relaxed">
+                Armada wahana udara tak berawak yang dikembangkan dan dioperasikan
+                oleh laboratorium APTRG untuk berbagai misi riset.
+              </p>
+            </div>
+
+            {/* Status summary bar */}
+            <div className="flex flex-wrap items-center justify-center gap-6 mb-10 py-4 px-6 mx-auto max-w-2xl"
+              style={{border:'1px solid rgba(255,255,255,0.05)', background:'rgba(8,15,26,0.5)'}}>
+              {[
+                { label: 'TOTAL WAHANA', val: aircraft.length, color: 'var(--primary)' },
+                { label: 'ACTIVE', val: aircraft.filter(a => a.status === 'ACTIVE').length, color: 'var(--success)' },
+                { label: 'DEVELOPMENT', val: aircraft.filter(a => a.status === 'DEVELOPMENT').length, color: 'var(--accent)' },
+                { label: 'STANDBY', val: aircraft.filter(a => a.status === 'STANDBY').length, color: '#a78bfa' },
+              ].map((s, i) => (
+                <div key={i} className="flex items-center gap-2 text-center">
+                  <div style={{fontFamily:'Orbitron', fontSize:'1.4rem', fontWeight:700, color:s.color}}>{s.val}</div>
+                  <div style={{fontFamily:'Share Tech Mono', fontSize:'0.58rem', color:'rgba(200,216,232,0.3)', letterSpacing:'0.12em'}}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Filter */}
+            <div className="flex flex-wrap justify-center gap-2 mb-10">
+              {types.map(t => (
+                <button key={t} onClick={() => setFilter(t)}
+                  className="tag transition-all duration-200 cursor-pointer"
+                  style={{
+                    color: filter === t ? 'var(--dark)' : 'rgba(200,216,232,0.4)',
+                    borderColor: filter === t ? 'var(--accent)' : 'rgba(255,255,255,0.08)',
+                    background: filter === t ? 'var(--accent)' : 'transparent',
+                    fontSize: '0.68rem', padding: '5px 14px',
+                    fontFamily: 'Share Tech Mono', letterSpacing: '0.1em',
+                  }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {/* Aircraft grid */}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {filtered.map((plane, i) => (
+                <AircraftCard key={plane.id} plane={plane} index={i}/>
+              ))}
+            </div>
+
+            <div className="text-center mt-10 flex flex-col gap-1">
+              <p className="text-xs opacity-20" style={{fontFamily:'Share Tech Mono', letterSpacing:'0.15em'}}>
+                FOTO 2D — assets/aircraft/ac01.png s/d ac04.png
+              </p>
+              <p className="text-xs opacity-20" style={{fontFamily:'Share Tech Mono', letterSpacing:'0.15em'}}>
+                MODEL 3D — assets/3d_pesawat/ac01.obj s/d ac04.obj
+              </p>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
     // ---- APP ROOT ----
     function App() {
       const [activeSection, setActiveSection] = useState('home');
@@ -1273,7 +2193,7 @@
           const total = document.documentElement.scrollHeight - window.innerHeight;
           setScrollProgress((window.scrollY / total) * 100);
 
-          const sections = ['home','about','divisions','team','stats','contact'];
+          const sections = ['home','about','divisions','team','highlight','aircraft','stats','contact'];
           for (const s of sections.reverse()) {
             const el = document.getElementById(s);
             if (el && window.scrollY >= el.offsetTop - 200) {
@@ -1295,6 +2215,8 @@
           <About/>
           <Divisions/>
           <Team/>
+          <VideoHighlight/>
+          <AircraftFleet/>
           <Stats/>
           <Ecosystem/>
           <Contact/>
