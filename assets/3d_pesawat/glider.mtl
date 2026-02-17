@@ -1,0 +1,112 @@
+# Blender 5.0.1 MTL File: 'perlan.blend'
+# www.blender.org
+
+newmtl Material
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd -s 20 20 1 C:/Users/VICTUS/AppData/Local/Temp/c349c178-dfb7-4584-826c-b3e047eeb26d_perlan-2-glider.zip.perlan-2-glider.zip/source/carbonfiber.jpeg
+
+newmtl all
+Ns 1000.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd C:/Users/VICTUS/AppData/Local/Temp/c349c178-dfb7-4584-826c-b3e047eeb26d_perlan-2-glider.zip.perlan-2-glider.zip/AllAircraft.png
+
+newmtl black
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.000000 0.000000 0.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+
+newmtl livery
+Ns 1000.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd C:/Users/VICTUS/AppData/Local/Temp/c349c178-dfb7-4584-826c-b3e047eeb26d_perlan-2-glider.zip.perlan-2-glider.zip/source/livery.png
+
+newmtl metal
+Ns 1000.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 3
+
+newmtl nav
+Ns 1000.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ni 1.450000
+d 1.000000
+illum 3
+map_Kd C:/Users/VICTUS/AppData/Local/Temp/c349c178-dfb7-4584-826c-b3e047eeb26d_perlan-2-glider.zip.perlan-2-glider.zip/source/map.png
+map_Ke C:/Users/VICTUS/AppData/Local/Temp/c349c178-dfb7-4584-826c-b3e047eeb26d_perlan-2-glider.zip.perlan-2-glider.zip/source/map.png
+
+newmtl red
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.000000 0.001913
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+
+newmtl white
+Ns 810.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+
+newmtl window
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.042029 0.018988 0.001357
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 0.200000
+illum 9
+
+newmtl windwards
+Ns 1000.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ni 1.450000
+d 1.000000
+illum 3
+map_Kd C:/Users/VICTUS/AppData/Local/Temp/c349c178-dfb7-4584-826c-b3e047eeb26d_perlan-2-glider.zip.perlan-2-glider.zip/source/logo.png
+map_Ke C:/Users/VICTUS/AppData/Local/Temp/c349c178-dfb7-4584-826c-b3e047eeb26d_perlan-2-glider.zip.perlan-2-glider.zip/source/logo.png
+
+newmtl yellow
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.466428 0.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
